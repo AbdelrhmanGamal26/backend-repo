@@ -1,6 +1,11 @@
 import { Queue, Worker, RedisOptions } from 'bullmq';
+import {
+  resendVerificationEmailTemplate,
+  accountDeletionReminderEmailTemplate,
+} from '../constants/emailTemplates';
 import sendEmail from './email';
 import { BULL_ACCOUNT_JOB_NAME } from '../constants/general';
+import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
 export const redisConnection: RedisOptions = {
   host: '127.0.0.1',
@@ -20,12 +25,9 @@ export const accountWorker = new Worker(
       await sendEmail({
         email: data.email,
         subject: 'Account permanent deletion reminder (3 days remains)',
-        message: `Hi ${data.name},
-      
-      We noticed your account is scheduled for deletion in 3 days. If you want to keep your account, please activate it before it's permanently removed.
-      
-      Thank you,
-      The [App Name] Team`,
+        message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
+          name: data.name,
+        }),
       });
 
     if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION)
@@ -33,21 +35,10 @@ export const accountWorker = new Worker(
         await sendEmail({
           email: data.userData.email,
           subject: 'Your email verification token (valid for 1 hour)',
-          message: `Hi ${data.userData.name},
-      
-      Thank you for registering with [Your App Name]!
-      
-      Please verify your email address by clicking the link below. This helps us ensure the security of your account.
-      
-      Verify your email: ${data.verificationUrl}
-      
-      This link will expire in 1 hour.
-      
-      If you didn't create an account, you can safely ignore this email.
-      
-      Thanks,
-      
-      The [Your App Name] Team`,
+          message: handlebarsEmailTemplateCompiler(resendVerificationEmailTemplate, {
+            name: data.userData.name,
+            verificationUrl: data.verificationUrl,
+          }),
         });
       } catch (err) {
         console.error('Failed to send email verification:', err);

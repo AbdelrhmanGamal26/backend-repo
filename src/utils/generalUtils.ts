@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export const isDevelopment: boolean = process.env.NODE_ENV?.trim() === 'development';
 
 export const isProduction: boolean = process.env.NODE_ENV?.trim() === 'production';
@@ -22,3 +24,5 @@ export const filterObj = (
   });
   return newObj;
 };
+
+export const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');

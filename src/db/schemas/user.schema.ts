@@ -79,6 +79,10 @@ const userSchema = new Schema<UserDocument>(
       type: Date,
       select: false,
     },
+    deleteAt: {
+      type: Date,
+      select: false,
+    },
   },
   {
     strict: true,

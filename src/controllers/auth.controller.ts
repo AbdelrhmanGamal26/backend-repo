@@ -6,69 +6,89 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
-  const user = await authServices.createUser(req);
+  await authServices.createUser(req.body, req.protocol, (name: string) => req.get(name) || '');
   res.status(RESPONSE_STATUSES.CREATED).json({
-    status: 'Success',
     message: 'check your email inbox for the email verification link',
-    data: {
-      user,
-    },
   });
 };
 
 export const loginUser = async (req: CustomRequest, res: Response) => {
   const { user, accessToken } = await authServices.login(req.body);
-  const { password, isVerified, loginAt, ...restUserData } = user.toObject();
   setValueToCookies(res, 'jwt', accessToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     data: {
       accessToken,
-      user: restUserData,
+      user,
     },
   });
 };
 
 export const forgotPassword = async (req: CustomRequest, res: Response) => {
-  await authServices.forgotPassword(req);
+  await authServices.forgotPassword(
+    req.body.email,
+    req.protocol,
+    (name: string) => req.get(name) || '',
+  );
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     message: 'Token sent to email',
   });
 };
 
 export const resetPassword = async (req: CustomRequest, res: Response) => {
-  const token = await authServices.resetPassword(req);
-  setValueToCookies(res, 'jwt', token);
+  const resetToken = Array.isArray(req.query.resetToken)
+    ? req.query.resetToken[0]
+    : req.query.resetToken;
+  if (typeof resetToken !== 'string') {
+    return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
+      message: 'Invalid or missing reset token',
+    });
+  }
+  await authServices.resetPassword(resetToken, req.body.password);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
-    data: {
-      accessToken: token,
-    },
+    message: 'Password reset successfully',
   });
 };
 
 export const verifyEmailToken = async (req: CustomRequest, res: Response) => {
-  const status = await authServices.verifyEmailToken(req);
-  if (
-    status === EMAIL_VERIFICATION_STATUSES.INVALID ||
-    status === EMAIL_VERIFICATION_STATUSES.INVALID_OR_EXPIRED
-  ) {
-    return res
-      .status(RESPONSE_STATUSES.BAD_REQUEST)
-      .redirect(`${process.env.FRONTEND_URL}/verifyEmail?status=${status}`);
-  } else if (
-    status === EMAIL_VERIFICATION_STATUSES.VERIFIED ||
-    status === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED
-  ) {
-    return res
-      .status(RESPONSE_STATUSES.FOUND)
-      .redirect(`${process.env.FRONTEND_URL}/verifyEmail?status=${status}`);
+  const token = Array.isArray(req.query.verificationToken)
+    ? req.query.verificationToken[0]
+    : req.query.verificationToken;
+
+  if (typeof token !== 'string') {
+    return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
+      message: 'Invalid or missing verification token',
+    });
+  }
+
+  const verificationStatus = await authServices.verifyEmailToken(token);
+
+  switch (verificationStatus) {
+    case EMAIL_VERIFICATION_STATUSES.INVALID:
+    case EMAIL_VERIFICATION_STATUSES.INVALID_OR_EXPIRED:
+      return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
+        message: 'Invalid token or token has expired',
+      });
+    case EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED:
+      return res.status(RESPONSE_STATUSES.FOUND).json({
+        message: 'Email already verified',
+      });
+    case EMAIL_VERIFICATION_STATUSES.VERIFIED:
+      return res.status(RESPONSE_STATUSES.FOUND).json({
+        message: 'Email verified successfully',
+      });
+    default:
+      return res.status(RESPONSE_STATUSES.SERVER).json({
+        message: 'An unexpected error occurred',
+      });
   }
 };
 
 export const resendVerificationToken = async (req: CustomRequest, res: Response) => {
-  const status = await authServices.resendVerificationToken(req);
+  const status = await authServices.resendVerificationToken(
+    req.body.email,
+    req.protocol,
+    (name: string) => req.get(name) || '',
+  );
 
   if (status === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED) {
     return res
@@ -77,7 +97,6 @@ export const resendVerificationToken = async (req: CustomRequest, res: Response)
   }
 
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     message: 'Token sent to email',
   });
 };

@@ -1,11 +1,11 @@
 import express, { Router } from 'express';
 import catchAsync from '../utils/catchAsync';
+import { USER_ROLES } from '../constants/general';
 import * as userController from '../controllers/user.controller';
+import { authorizedMiddleware } from '../middlewares/authorizedMiddleware';
 import authenticatedMiddleware from '../middlewares/authenticatedMiddleware';
 import bodyValidationMiddleware from '../middlewares/bodyValidationMiddleware';
 import { updatePasswordSchema, userUpdateSchema } from '../validations/user.validation';
-import { authorizedMiddleware } from '../middlewares/authorizedMiddleware';
-import { USER_ROLES } from '../constants/general';
 
 const userRouter: Router = express.Router();
 

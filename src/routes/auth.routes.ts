@@ -26,26 +26,26 @@ authRouter.post(
 );
 
 authRouter.post(
-  '/forgotPassword',
+  '/forgot-password',
   bodyValidationMiddleware(userForgotPasswordSchema),
   catchAsync(authController.forgotPassword),
 );
 
 authRouter.patch(
-  '/resetPassword',
-  queryParamsValidationMiddleware(resetTokenSchema),
+  '/reset-password',
+  queryParamsValidationMiddleware(resetTokenSchema, 'Invalid reset token'),
   bodyValidationMiddleware(resetPasswordSchema),
   catchAsync(authController.resetPassword),
 );
 
 authRouter.post(
-  '/verifyEmail',
-  queryParamsValidationMiddleware(verificationTokenSchema),
+  '/verify-email',
+  queryParamsValidationMiddleware(verificationTokenSchema, 'Invalid verification token'),
   catchAsync(authController.verifyEmailToken),
 );
 
 authRouter.post(
-  '/resendVerificationToken',
+  '/resend-verification-token',
   bodyValidationMiddleware(userForgotPasswordSchema),
   catchAsync(authController.resendVerificationToken),
 );

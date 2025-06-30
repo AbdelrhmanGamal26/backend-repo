@@ -18,6 +18,7 @@ export interface UserSchemaFields {
   loginAt?: Date;
   isVerified: boolean;
   verifiedAt?: Date;
+  deleteAt?: Date;
 }
 
 export interface UserInstanceMethods {

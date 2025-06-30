@@ -116,6 +116,7 @@ export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => 
       { _id: userId },
       {
         accountState: ACCOUNT_STATES.INACTIVE,
+        deleteAt: Date.now(),
       },
     );
 
@@ -138,7 +139,7 @@ export const deleteUser = async (
   if (decoded.data === userId.toString() && role === USER_ROLES.ADMIN) {
     const deletedUser = await User.findOneAndUpdate(
       { email },
-      { accountState: ACCOUNT_STATES.INACTIVE },
+      { accountState: ACCOUNT_STATES.INACTIVE, deleteAt: Date.now() },
     );
 
     if (!deletedUser) {

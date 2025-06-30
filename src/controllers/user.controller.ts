@@ -2,7 +2,6 @@ import { Types } from 'mongoose';
 import { Response } from 'express';
 import { verifyToken } from '../utils/jwt';
 import getTokenValue from '../utils/getTokenValue';
-import { UserDocument } from '../@types/userTypes';
 import { CustomRequest } from '../@types/generalTypes';
 import * as userServices from '../services/user.service';
 import setValueToCookies from '../utils/setValueToCookies';
@@ -11,9 +10,8 @@ import { blacklistToken } from '../utils/tokenBlackListingUtils';
 
 export const getUser = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id as Types.ObjectId;
-  const user: UserDocument = await userServices.getUser(userId.toString());
+  const user = await userServices.getUser(userId.toString());
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     data: {
       user,
     },
@@ -21,9 +19,8 @@ export const getUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const getAllUsers = async (req: CustomRequest, res: Response) => {
-  const users: UserDocument[] = await userServices.getAllUsers(req.query);
+  const users = await userServices.getAllUsers(req.query);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     data: {
       users,
     },
@@ -31,9 +28,8 @@ export const getAllUsers = async (req: CustomRequest, res: Response) => {
 };
 
 export const getAllActiveUsers = async (req: CustomRequest, res: Response) => {
-  const users: UserDocument[] = await userServices.getAllActiveUsers(req.query);
+  const users = await userServices.getAllActiveUsers(req.query);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     data: {
       users,
     },
@@ -41,15 +37,10 @@ export const getAllActiveUsers = async (req: CustomRequest, res: Response) => {
 };
 
 export const updateUserProfile = async (req: CustomRequest, res: Response) => {
-  const userId = req.user?._id as Types.ObjectId;
+  const userId = req.user!._id as Types.ObjectId;
   const currentToken = getTokenValue(req, 'jwt');
-  const updatedUser: UserDocument = await userServices.updateUserProfile(
-    userId,
-    req.body,
-    currentToken,
-  );
+  const updatedUser = await userServices.updateUserProfile(userId, req.body, currentToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     data: {
       user: updatedUser,
     },
@@ -57,7 +48,7 @@ export const updateUserProfile = async (req: CustomRequest, res: Response) => {
 };
 
 export const updateUserPassword = async (req: CustomRequest, res: Response) => {
-  const userId = req.user?._id as Types.ObjectId;
+  const userId = req.user!._id as Types.ObjectId;
   const { oldPassword, newPassword, confirmNewPassword } = req.body;
   const currentToken = getTokenValue(req, 'jwt');
   const newToken = await userServices.updateUserPassword(
@@ -69,9 +60,8 @@ export const updateUserPassword = async (req: CustomRequest, res: Response) => {
   );
   setValueToCookies(res, 'jwt', newToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
-    token: newToken,
     data: {
+      token: newToken,
       message: 'Password updated successfully',
     },
   });
@@ -93,7 +83,7 @@ export const deleteMe = async (req: CustomRequest, res: Response) => {
 
 export const deleteUser = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id as Types.ObjectId;
-  const role: string = req.user!.role;
+  const role = req.user!.role;
   const { email } = req.body;
   const currentToken: string = getTokenValue(req, 'jwt');
   await userServices.deleteUser(userId, role, email, currentToken);
@@ -115,7 +105,6 @@ export const logout = async (req: CustomRequest, res: Response) => {
     sameSite: 'strict',
   });
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    status: 'Success',
     message: 'You have been logged out successfully.',
   });
 };

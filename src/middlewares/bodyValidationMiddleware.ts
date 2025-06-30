@@ -6,8 +6,7 @@ import validateSchema from '../validations/validateSchema';
 
 const bodyValidationMiddleware = (Schema: z.Schema) =>
   catchAsync(async (req: CustomRequest, _res: Response, next: NextFunction) => {
-    const validatedData = validateSchema({ Schema, data: req.body });
-    req.body = validatedData;
+    validateSchema({ Schema, data: req.body });
     next();
   });
 
