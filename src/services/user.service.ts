@@ -143,7 +143,7 @@ export const deleteUser = async (
     );
 
     if (!deletedUser) {
-      throw new AppError('No user found with that email address', RESPONSE_STATUSES.NOT_FOUND);
+      throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
     }
   } else {
     throw new AppError(

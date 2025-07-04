@@ -31,6 +31,12 @@ authRouter.post(
   catchAsync(authController.forgotPassword),
 );
 
+authRouter.get(
+  '/verify-reset-token',
+  queryParamsValidationMiddleware(resetTokenSchema, 'Invalid reset token'),
+  catchAsync(authController.verifyResetToken),
+);
+
 authRouter.patch(
   '/reset-password',
   queryParamsValidationMiddleware(resetTokenSchema, 'Invalid reset token'),

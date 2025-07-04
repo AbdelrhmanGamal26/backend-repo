@@ -4,20 +4,20 @@ import {
   BULL_ACCOUNT_JOB_NAME,
   EMAIL_VERIFICATION_STATUSES,
 } from '../constants/general';
+import {
+  forgotPasswordEmailTemplate,
+  emailVerificationEmailTemplate,
+} from '../constants/emailTemplates';
 import sendEmail from '../utils/email';
 import AppError from '../utils/appError';
 import User from '../db/schemas/user.schema';
 import { generateToken } from '../utils/jwt';
 import { accountQueue } from '../utils/bull';
+import { hashToken } from '../utils/generalUtils';
+import { userIsVerified } from '../utils/userUtils';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import {
-  emailVerificationEmailTemplate,
-  forgotPasswordEmailTemplate,
-} from '../constants/emailTemplates';
 import handlebarsEmailTemplateCompiler from '../utils/handlebarsEmailTemplateCompiler';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
-import { userIsVerified } from '../utils/userUtils';
-import { hashToken } from '../utils/generalUtils';
 
 interface CreatedUserType {
   name: string;
@@ -139,11 +139,7 @@ export const login = async (userData: {
   return { user: restUserData, accessToken };
 };
 
-export const forgotPassword = async (
-  email: string,
-  protocol: string,
-  get: (name: string) => string,
-): Promise<void> => {
+export const forgotPassword = async (email: string): Promise<void> => {
   const user = await User.findOne({ email }).select('+isVerified');
 
   if (!user) {
@@ -156,7 +152,7 @@ export const forgotPassword = async (
   const resetToken = user.createPasswordResetToken();
   await user.save({ validateBeforeSave: false });
 
-  const resetURL = `${protocol}://${get('host')}/api/v1/auth/reset-password?resetToken=${resetToken}`;
+  const resetURL = `${process.env.FRONTEND_URL}/reset-password?resetToken=${resetToken}`;
   const message = handlebarsEmailTemplateCompiler(forgotPasswordEmailTemplate, {
     name: user.name,
     resetURL,
@@ -174,6 +170,24 @@ export const forgotPassword = async (
     await user.save({ validateBeforeSave: false });
     throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
   }
+};
+
+export const verifyResetToken = async (resetToken: string) => {
+  const hashedToken = hashToken(resetToken);
+
+  const user = await User.findOne({
+    passwordResetToken: hashedToken,
+    passwordResetTokenExpires: { $gt: Date.now() },
+  }).select('+isVerified');
+
+  if (!user) {
+    throw new AppError('Invalid token or token expired', RESPONSE_STATUSES.BAD_REQUEST);
+  }
+
+  // check user verification status
+  userIsVerified(user);
+
+  return;
 };
 
 export const resetPassword = async (resetToken: string, password: string): Promise<void> => {

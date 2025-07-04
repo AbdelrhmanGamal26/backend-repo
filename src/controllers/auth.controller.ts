@@ -24,13 +24,24 @@ export const loginUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const forgotPassword = async (req: CustomRequest, res: Response) => {
-  await authServices.forgotPassword(
-    req.body.email,
-    req.protocol,
-    (name: string) => req.get(name) || '',
-  );
+  await authServices.forgotPassword(req.body.email);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     message: 'Token sent to email',
+  });
+};
+
+export const verifyResetToken = async (req: CustomRequest, res: Response) => {
+  const resetToken = Array.isArray(req.query.resetToken)
+    ? req.query.resetToken[0]
+    : req.query.resetToken;
+  if (typeof resetToken !== 'string') {
+    return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
+      message: 'Invalid or missing reset token',
+    });
+  }
+  await authServices.verifyResetToken(resetToken);
+  res.status(RESPONSE_STATUSES.SUCCESS).json({
+    message: 'Token verified successfully',
   });
 };
 

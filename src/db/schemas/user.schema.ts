@@ -22,6 +22,7 @@ const userSchema = new Schema<UserDocument>(
       type: String,
       enum: ['admin', 'user'],
       default: 'user',
+      immutable: true,
     },
     password: {
       type: String,

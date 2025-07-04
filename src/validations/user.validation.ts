@@ -1,13 +1,11 @@
 import { z } from 'zod';
 import ZOD_VALIDATIONS from './zodValidations';
-import { USER_ROLES } from '../constants/general';
 
 export const userCreationSchema = z
   .object({
     name: ZOD_VALIDATIONS.EN_REQ_STR_MIN_MAX(20),
     email: ZOD_VALIDATIONS.EMAIL,
     photo: ZOD_VALIDATIONS.NOT_REQ_STRING,
-    role: z.enum([USER_ROLES.ADMIN, USER_ROLES.USER]),
     password: ZOD_VALIDATIONS.PASSWORD,
     confirmPassword: ZOD_VALIDATIONS.REQ_STRING,
   })
