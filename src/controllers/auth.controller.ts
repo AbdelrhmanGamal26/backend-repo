@@ -6,9 +6,9 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
-  await authServices.createUser(req.body, req.protocol, (name: string) => req.get(name) || '');
+  await authServices.createUser(req.body);
   res.status(RESPONSE_STATUSES.CREATED).json({
-    message: 'check your email inbox for the email verification link',
+    message: 'check your email inbox for the account verification email',
   });
 };
 
@@ -26,7 +26,7 @@ export const loginUser = async (req: CustomRequest, res: Response) => {
 export const forgotPassword = async (req: CustomRequest, res: Response) => {
   await authServices.forgotPassword(req.body.email);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    message: 'Token sent to email',
+    message: 'Please check your email inbox for the password reset email',
   });
 };
 
@@ -60,7 +60,7 @@ export const resetPassword = async (req: CustomRequest, res: Response) => {
   });
 };
 
-export const verifyEmailToken = async (req: CustomRequest, res: Response) => {
+export const verifyEmail = async (req: CustomRequest, res: Response) => {
   const token = Array.isArray(req.query.verificationToken)
     ? req.query.verificationToken[0]
     : req.query.verificationToken;
@@ -71,7 +71,7 @@ export const verifyEmailToken = async (req: CustomRequest, res: Response) => {
     });
   }
 
-  const verificationStatus = await authServices.verifyEmailToken(token);
+  const verificationStatus = await authServices.verifyEmail(token);
 
   switch (verificationStatus) {
     case EMAIL_VERIFICATION_STATUSES.INVALID:
@@ -80,7 +80,7 @@ export const verifyEmailToken = async (req: CustomRequest, res: Response) => {
         message: 'Invalid token or token has expired',
       });
     case EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED:
-      return res.status(RESPONSE_STATUSES.FOUND).json({
+      return res.status(RESPONSE_STATUSES.SUCCESS).json({
         message: 'Email already verified',
       });
     case EMAIL_VERIFICATION_STATUSES.VERIFIED:
@@ -95,19 +95,15 @@ export const verifyEmailToken = async (req: CustomRequest, res: Response) => {
 };
 
 export const resendVerificationToken = async (req: CustomRequest, res: Response) => {
-  const status = await authServices.resendVerificationToken(
-    req.body.email,
-    req.protocol,
-    (name: string) => req.get(name) || '',
-  );
+  const status = await authServices.resendVerificationToken(req.body.email);
 
   if (status === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED) {
-    return res
-      .status(RESPONSE_STATUSES.SUCCESS)
-      .redirect(`${process.env.FRONTEND_URL}/verifyEmail?status=${status}`);
+    return res.status(RESPONSE_STATUSES.SUCCESS).json({
+      message: 'Your account is already verified',
+    });
   }
 
   res.status(RESPONSE_STATUSES.SUCCESS).json({
-    message: 'Token sent to email',
+    message: 'Please check your email inbox for the activation email',
   });
 };

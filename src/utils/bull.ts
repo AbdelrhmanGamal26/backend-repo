@@ -34,7 +34,7 @@ export const accountWorker = new Worker(
       try {
         await sendEmail({
           email: data.userData.email,
-          subject: 'Your email verification token (valid for 1 hour)',
+          subject: 'Your account verification token (valid for 1 hour)',
           message: handlebarsEmailTemplateCompiler(resendVerificationEmailTemplate, {
             name: data.userData.name,
             verificationUrl: data.verificationUrl,

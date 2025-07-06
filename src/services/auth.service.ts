@@ -26,11 +26,7 @@ interface CreatedUserType {
   confirmPassword: string;
 }
 
-export const createUser = async (
-  data: CreatedUserType,
-  protocol: string,
-  get: (name: string) => string,
-) => {
+export const createUser = async (data: CreatedUserType) => {
   const createdUser = await User.create(data);
 
   if (!createdUser) {
@@ -46,7 +42,7 @@ export const createUser = async (
     validateBeforeSave: false,
   });
 
-  const verificationUrl = `${protocol}://${get('host')}/api/v1/auth/verify-email?verificationToken=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
 
   try {
     await accountQueue.remove(`email-${createdUser._id}`); // Clean up first
@@ -54,15 +50,6 @@ export const createUser = async (
       BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION,
       { userData: { email: createdUser.email, name: createdUser.name }, verificationUrl },
       { delay: 5000, jobId: `email-${createdUser._id}` },
-    );
-
-    await accountQueue.add(
-      BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
-      { email: createdUser.email, name: createdUser.name },
-      {
-        delay: 3 * 24 * 60 * 60 * 1000,
-        jobId: `reminder-${createdUser._id}`,
-      },
     );
   } catch (err) {
     createdUser.verifyEmailToken = undefined;
@@ -211,7 +198,7 @@ export const resetPassword = async (resetToken: string, password: string): Promi
   await user.save();
 };
 
-export const verifyEmailToken = async (verificationToken: string): Promise<string> => {
+export const verifyEmail = async (verificationToken: string): Promise<string> => {
   const hashedToken = hashToken(verificationToken);
 
   const user = await User.findOne({
@@ -239,11 +226,7 @@ export const verifyEmailToken = async (verificationToken: string): Promise<strin
   return EMAIL_VERIFICATION_STATUSES.VERIFIED;
 };
 
-export const resendVerificationToken = async (
-  email: string,
-  protocol: string,
-  get: (name: string) => string,
-): Promise<string | void> => {
+export const resendVerificationToken = async (email: string): Promise<string | void> => {
   const user = await User.findOne({ email }).select('+isVerified');
 
   if (!user) {
@@ -257,7 +240,7 @@ export const resendVerificationToken = async (
   const verificationToken = user.createEmailVerificationToken(10 * 60 * 1000);
   await user.save({ validateBeforeSave: false });
 
-  const verificationUrl = `${protocol}://${get('host')}/api/v1/verify-email?verificationToken=${verificationToken}`;
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
   const verificationMessage = handlebarsEmailTemplateCompiler(emailVerificationEmailTemplate, {
     name: user.name,
     verificationUrl,

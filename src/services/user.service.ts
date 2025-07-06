@@ -2,11 +2,12 @@ import { Types } from 'mongoose';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
 import User from '../db/schemas/user.schema';
+import { accountQueue } from '../utils/bull';
 import { filterObj } from '../utils/generalUtils';
 import { UserDocument } from '../@types/userTypes';
 import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { ACCOUNT_STATES, USER_ROLES } from '../constants/general';
+import { ACCOUNT_STATES, BULL_ACCOUNT_JOB_NAME, USER_ROLES } from '../constants/general';
 
 export const getUser = async (userId: string) => {
   return userDao.getUser(userId);
@@ -123,6 +124,19 @@ export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => 
     if (!deletedUser) {
       throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
     }
+
+    try {
+      await accountQueue.add(
+        BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
+        { email: deletedUser.email, name: deletedUser.name },
+        {
+          delay: 3 * 24 * 60 * 60 * 1000,
+          jobId: `reminder-${deletedUser._id}`,
+        },
+      );
+    } catch (err) {
+      throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
+    }
   } else {
     throw new AppError('You are not allowed to delete other users', RESPONSE_STATUSES.UNAUTHORIZED);
   }
@@ -144,6 +158,19 @@ export const deleteUser = async (
 
     if (!deletedUser) {
       throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
+    }
+
+    try {
+      await accountQueue.add(
+        BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
+        { email: deletedUser.email, name: deletedUser.name },
+        {
+          delay: 3 * 24 * 60 * 60 * 1000,
+          jobId: `reminder-${deletedUser._id}`,
+        },
+      );
+    } catch (err) {
+      throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
     }
   } else {
     throw new AppError(
