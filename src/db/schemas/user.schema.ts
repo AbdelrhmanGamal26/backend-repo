@@ -65,6 +65,8 @@ const userSchema = new Schema<UserDocument>(
     },
     timeToDeleteAfterSignupWithoutActivation: {
       type: Date,
+      default: undefined,
+      expires: 0,
       select: false,
     },
     loginAt: {
@@ -90,8 +92,9 @@ const userSchema = new Schema<UserDocument>(
   },
 );
 
+// ***Leaving this code for reference***
 // TTL index — only works on Date fields with `expireAfterSeconds`
-userSchema.index({ timeToDeleteAfterSignupWithoutActivation: 1 }, { expireAfterSeconds: 0 });
+// userSchema.index({ timeToDeleteAfterSignupWithoutActivation: 1 }, { expireAfterSeconds: 0 });
 
 const SALT_ROUNDS: number = 12;
 

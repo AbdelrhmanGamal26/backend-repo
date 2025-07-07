@@ -51,6 +51,16 @@ export const createUser = async (data: CreatedUserType) => {
       { userData: { email: createdUser.email, name: createdUser.name }, verificationUrl },
       { delay: 5000, jobId: `email-${createdUser._id}` },
     );
+
+    // send delete account permanently reminder email if user does not activate
+    await accountQueue.add(
+      BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
+      { email: createdUser.email, name: createdUser.name },
+      {
+        delay: 3 * 24 * 60 * 60 * 1000,
+        jobId: `reminder-${createdUser._id}`,
+      },
+    );
   } catch (err) {
     createdUser.verifyEmailToken = undefined;
     createdUser.verifyEmailTokenExpires = undefined;
@@ -221,6 +231,7 @@ export const verifyEmail = async (verificationToken: string): Promise<string> =>
   user.timeToDeleteAfterSignupWithoutActivation = undefined;
   await user.save();
 
+  await accountQueue.remove(`email-${user._id}`);
   await accountQueue.remove(`reminder-${user._id}`);
 
   return EMAIL_VERIFICATION_STATUSES.VERIFIED;
@@ -236,6 +247,8 @@ export const resendVerificationToken = async (email: string): Promise<string | v
   if (user.isVerified) {
     return EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED;
   }
+
+  await accountQueue.remove(`email-${user._id}`);
 
   const verificationToken = user.createEmailVerificationToken(10 * 60 * 1000);
   await user.save({ validateBeforeSave: false });

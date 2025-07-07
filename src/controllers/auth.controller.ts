@@ -80,12 +80,12 @@ export const verifyEmail = async (req: CustomRequest, res: Response) => {
         message: 'Invalid token or token has expired',
       });
     case EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED:
-      return res.status(RESPONSE_STATUSES.SUCCESS).json({
-        message: 'Email already verified',
-      });
     case EMAIL_VERIFICATION_STATUSES.VERIFIED:
-      return res.status(RESPONSE_STATUSES.FOUND).json({
-        message: 'Email verified successfully',
+      return res.status(RESPONSE_STATUSES.SUCCESS).json({
+        message:
+          verificationStatus === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED
+            ? 'Email already verified'
+            : 'Email verified successfully',
       });
     default:
       return res.status(RESPONSE_STATUSES.SERVER).json({
