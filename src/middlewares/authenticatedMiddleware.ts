@@ -1,17 +1,16 @@
-import { JwtPayload } from 'jsonwebtoken';
 import { NextFunction, Response } from 'express';
 import AppError from '../utils/appError';
 import { verifyToken } from '../utils/jwt';
 import catchAsync from '../utils/catchAsync';
 import User from '../db/schemas/user.schema';
-import { CustomRequest } from '../@types/generalTypes';
 import getTokenValue from '../utils/getTokenValue';
+import { CustomRequest } from '../@types/generalTypes';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { isTokenBlacklisted } from '../utils/tokenBlackListingUtils';
 
 const authenticatedMiddleware = catchAsync(
   async (req: CustomRequest, _res: Response, next: NextFunction) => {
-    const token = getTokenValue(req, 'jwt') || req.headers.authorization?.split(' ')[1];
+    const token = getTokenValue(req, 'accessToken') || req.headers.authorization?.split(' ')[1];
 
     if (!token) {
       return next(
@@ -26,7 +25,7 @@ const authenticatedMiddleware = catchAsync(
       return next(new AppError('Token has been invalidated', RESPONSE_STATUSES.UNAUTHORIZED));
     }
 
-    const decoded = verifyToken(token) as JwtPayload;
+    const decoded = verifyToken(token, 'JWT_ACCESS_TOKEN_SECRET');
 
     if (
       !decoded ||

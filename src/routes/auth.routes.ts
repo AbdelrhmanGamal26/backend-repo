@@ -56,4 +56,6 @@ authRouter.post(
   catchAsync(authController.resendVerificationToken),
 );
 
+authRouter.get('/refresh-token', catchAsync(authController.refreshAccessToken));
+
 export default authRouter;

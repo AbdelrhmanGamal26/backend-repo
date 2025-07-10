@@ -19,6 +19,7 @@ export interface UserSchemaFields {
   isVerified: boolean;
   verifiedAt?: Date;
   deleteAt?: Date;
+  refreshToken?: string;
 }
 
 export interface UserInstanceMethods {

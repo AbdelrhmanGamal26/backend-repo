@@ -26,7 +26,7 @@ export const updateUserProfile = async (
   userData: { [key: string]: any },
   currentToken: string,
 ) => {
-  const decoded = verifyToken(currentToken);
+  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data !== userId.toString()) {
     throw new AppError(
@@ -74,7 +74,7 @@ export const updateUserPassword = async (
   confirmNewPassword: string,
   currentToken: string,
 ) => {
-  const decoded = verifyToken(currentToken);
+  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data !== userId.toString()) {
     throw new AppError(
@@ -104,13 +104,22 @@ export const updateUserPassword = async (
   user.confirmPassword = confirmNewPassword;
   await user.save();
 
-  const token = generateToken(user._id);
+  const accessToken = generateToken(
+    user._id,
+    'JWT_ACCESS_TOKEN_SECRET',
+    'JWT_ACCESS_TOKEN_EXPIRES_IN',
+  );
+  const refreshToken = generateToken(
+    user._id,
+    'JWT_REFRESH_TOKEN_SECRET',
+    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+  );
 
-  return token;
+  return { accessToken, refreshToken };
 };
 
 export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => {
-  const decoded = verifyToken(currentToken);
+  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data === userId.toString()) {
     const deletedUser = await User.findOneAndUpdate(
@@ -148,7 +157,7 @@ export const deleteUser = async (
   email: string,
   currentToken: string,
 ) => {
-  const decoded = verifyToken(currentToken);
+  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data === userId.toString() && role === USER_ROLES.ADMIN) {
     const deletedUser = await User.findOneAndUpdate(

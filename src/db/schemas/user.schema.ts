@@ -86,6 +86,10 @@ const userSchema = new Schema<UserDocument>(
       type: Date,
       select: false,
     },
+    refreshToken: {
+      type: String,
+      select: false,
+    },
   },
   {
     strict: true,

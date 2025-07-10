@@ -3,7 +3,7 @@ import { CustomRequest } from '../@types/generalTypes';
 import * as authServices from '../services/auth.service';
 import setValueToCookies from '../utils/setValueToCookies';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { EMAIL_VERIFICATION_STATUSES } from '../constants/general';
+import { EMAIL_VERIFICATION_STATUSES, REFRESH_TOKEN_MAX_AGE } from '../constants/general';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
   await authServices.createUser(req.body);
@@ -13,14 +13,21 @@ export const createUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const loginUser = async (req: CustomRequest, res: Response) => {
-  const { user, accessToken } = await authServices.login(req.body);
-  setValueToCookies(res, 'jwt', accessToken);
+  const { user, accessToken, refreshToken } = await authServices.login(req.body);
+  setValueToCookies(res, 'accessToken', accessToken);
+  setValueToCookies(res, 'refreshToken', refreshToken, REFRESH_TOKEN_MAX_AGE);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
       accessToken,
       user,
     },
   });
+};
+
+export const refreshAccessToken = async (req: CustomRequest, res: Response) => {
+  const newAccessToken = await authServices.refreshAccessToken(req.cookies?.refreshToken);
+  setValueToCookies(res, 'accessToken', newAccessToken);
+  res.status(RESPONSE_STATUSES.SUCCESS).json({ message: 'Access token refreshed' });
 };
 
 export const forgotPassword = async (req: CustomRequest, res: Response) => {

@@ -11,10 +11,10 @@ import {
 import sendEmail from '../utils/email';
 import AppError from '../utils/appError';
 import User from '../db/schemas/user.schema';
-import { generateToken } from '../utils/jwt';
 import { accountQueue } from '../utils/bull';
 import { hashToken } from '../utils/generalUtils';
 import { userIsVerified } from '../utils/userUtils';
+import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import handlebarsEmailTemplateCompiler from '../utils/handlebarsEmailTemplateCompiler';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
@@ -69,18 +69,18 @@ export const createUser = async (data: CreatedUserType) => {
   }
 };
 
-interface UserLoginReturnDataType {
+type UserLoginReturnDataType = {
   _id: Types.ObjectId;
   __v: number;
   name: string;
   email: string;
   role: string;
-}
+};
 
 export const login = async (userData: {
   email: string;
   password: string;
-}): Promise<{ user: UserLoginReturnDataType; accessToken: string }> => {
+}): Promise<{ user: UserLoginReturnDataType; accessToken: string; refreshToken: string }> => {
   const user = await User.findOne({
     email: userData.email,
   }).select('+password +isVerified +deleteAt +accountState');
@@ -125,15 +125,58 @@ export const login = async (userData: {
 
   await clearLoginAttempts(userData.email);
 
+  const accessToken = generateToken(
+    user._id,
+    'JWT_ACCESS_TOKEN_SECRET',
+    'JWT_ACCESS_TOKEN_EXPIRES_IN',
+  );
+  const refreshToken = generateToken(
+    user._id,
+    'JWT_REFRESH_TOKEN_SECRET',
+    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+  );
+
   user.loginAt = new Date();
+  user.refreshToken = refreshToken;
   await user.save({ validateBeforeSave: false });
 
-  const accessToken = generateToken(user._id);
+  const {
+    loginAt,
+    password,
+    deleteAt,
+    isVerified,
+    accountState,
+    refreshToken: refreshAccessToken,
+    ...restUserData
+  } = user.toObject();
 
-  const { password, isVerified, loginAt, deleteAt, accountState, ...restUserData } =
-    user.toObject();
+  return { user: restUserData, accessToken, refreshToken };
+};
 
-  return { user: restUserData, accessToken };
+export const refreshAccessToken = async (refreshToken: string) => {
+  if (!refreshToken) {
+    throw new AppError('Refresh token missing', RESPONSE_STATUSES.UNAUTHORIZED);
+  }
+
+  const payload = verifyToken(refreshToken, 'JWT_REFRESH_TOKEN_SECRET');
+
+  if (!payload) {
+    throw new AppError('Invalid refresh token', RESPONSE_STATUSES.FORBIDDEN);
+  }
+
+  const user = await User.findById(payload.userId).select('+refreshToken');
+
+  if (!user || user.refreshToken !== refreshToken) {
+    throw new AppError('Refresh token mismatch', RESPONSE_STATUSES.FORBIDDEN);
+  }
+
+  const newAccessToken = generateToken(
+    user._id.toString(),
+    'JWT_REFRESH_TOKEN_SECRET',
+    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+  );
+
+  return newAccessToken;
 };
 
 export const forgotPassword = async (email: string): Promise<void> => {
