@@ -89,7 +89,9 @@ export const updateUserPassword = async (
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
   }
 
-  if (!(await user.correctPassword(oldPassword))) {
+  const isPasswordCorrect = await user.correctPassword(oldPassword);
+
+  if (!isPasswordCorrect) {
     throw new AppError('Your current password is not correct', RESPONSE_STATUSES.UNAUTHORIZED);
   }
 
@@ -187,4 +189,17 @@ export const deleteUser = async (
       RESPONSE_STATUSES.UNAUTHORIZED,
     );
   }
+};
+
+export const logout = async (id: Types.ObjectId) => {
+  const currentUser = await User.findById(id).select('+refreshToken');
+
+  if (!currentUser) {
+    throw new AppError('No user found for that id', RESPONSE_STATUSES.NOT_FOUND);
+  }
+
+  currentUser.refreshToken = undefined;
+  await currentUser.save({ validateBeforeSave: false });
+
+  return;
 };

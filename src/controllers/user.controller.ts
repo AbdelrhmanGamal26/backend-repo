@@ -102,6 +102,8 @@ export const logout = async (req: CustomRequest, res: Response) => {
   const expiresIn =
     decoded && typeof decoded.exp === 'number' ? decoded.exp - Math.floor(Date.now() / 1000) : 0;
 
+  await userServices.logout(decoded.data);
+
   await blacklistToken(token, expiresIn);
   clearCookieValue(res, 'accessToken');
   clearCookieValue(res, 'refreshToken');
