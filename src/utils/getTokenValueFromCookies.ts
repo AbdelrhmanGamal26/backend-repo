@@ -2,7 +2,7 @@ import AppError from './appError';
 import { CustomRequest } from '../@types/generalTypes';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 
-const getTokenValue = (req: CustomRequest, cookieName: string): string => {
+const getTokenValueFromCookies = (req: CustomRequest, cookieName: string): string => {
   const token = req.cookies?.[cookieName];
 
   if (!token) {
@@ -15,4 +15,4 @@ const getTokenValue = (req: CustomRequest, cookieName: string): string => {
   return token;
 };
 
-export default getTokenValue;
+export default getTokenValueFromCookies;

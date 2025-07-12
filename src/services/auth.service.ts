@@ -1,9 +1,5 @@
 import { Types } from 'mongoose';
-import {
-  ACCOUNT_STATES,
-  BULL_ACCOUNT_JOB_NAME,
-  EMAIL_VERIFICATION_STATUSES,
-} from '../constants/general';
+import { Response } from 'express';
 import {
   forgotPasswordEmailTemplate,
   emailVerificationEmailTemplate,
@@ -14,9 +10,14 @@ import User from '../db/schemas/user.schema';
 import { accountQueue } from '../utils/bull';
 import { hashToken } from '../utils/generalUtils';
 import { userIsVerified } from '../utils/userUtils';
+import clearCookieValue from '../utils/clearCookieValue';
 import { generateToken, verifyToken } from '../utils/jwt';
+import setValueToCookies from '../utils/setValueToCookies';
+import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import handlebarsEmailTemplateCompiler from '../utils/handlebarsEmailTemplateCompiler';
+import { BULL_ACCOUNT_JOB_NAME, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
+import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 
 interface CreatedUserType {
@@ -74,16 +75,22 @@ type UserLoginReturnDataType = {
   __v: number;
   name: string;
   email: string;
-  role: string;
 };
 
-export const login = async (userData: {
-  email: string;
-  password: string;
-}): Promise<{ user: UserLoginReturnDataType; accessToken: string; refreshToken: string }> => {
+export const login = async (
+  userData: {
+    email: string;
+    password: string;
+  },
+  res: Response,
+  jwt: string,
+): Promise<{ user: UserLoginReturnDataType; accessToken: string; refreshToken: string }> => {
   const user = await User.findOne({
     email: userData.email,
-  }).select('+password +isVerified +deleteAt +accountState');
+  }).select('+password +isVerified +deleteAt +accountState +refreshToken');
+
+  // Store the login attempt
+  await checkLoginAttempts(userData.email);
 
   if (!user) {
     await recordFailedAttempt(userData.email);
@@ -93,9 +100,6 @@ export const login = async (userData: {
 
   // check user verification status
   userIsVerified(user);
-
-  // Store the login attempt
-  await checkLoginAttempts(userData.email);
 
   // Remove any account deletion reminder job
   await accountQueue.remove(`reminder-${user._id}`);
@@ -108,72 +112,98 @@ export const login = async (userData: {
   }
 
   // Reactivate user account if it's inactive and still within reactivation grace period
-  const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
-
-  const inactiveSince = user.deleteAt?.getTime() ?? 0;
-  const withinGracePeriod = Date.now() - inactiveSince <= THIRTY_DAYS_IN_MS;
-
-  if (user.accountState === ACCOUNT_STATES.INACTIVE) {
-    if (withinGracePeriod) {
-      user.accountState = ACCOUNT_STATES.ACTIVE;
-      user.deleteAt = undefined;
-      await user.save({ validateBeforeSave: false });
-    } else {
-      throw new AppError('Account has been deactivated permanently', RESPONSE_STATUSES.NOT_FOUND);
-    }
-  }
+  await reactivateUserIfWithinGracePeriod(user);
 
   await clearLoginAttempts(userData.email);
+
+  const refreshTokenValue = generateToken(
+    user._id,
+    'JWT_REFRESH_TOKEN_SECRET',
+    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+  );
+
+  // Handle Token Rotation
+  const newRefreshTokenArray = await rotateRefreshToken(res, jwt, refreshTokenValue, user, User);
+
+  user.loginAt = new Date();
+  user.refreshToken = [...newRefreshTokenArray];
+  await user.save({ validateBeforeSave: false });
 
   const accessToken = generateToken(
     user._id,
     'JWT_ACCESS_TOKEN_SECRET',
     'JWT_ACCESS_TOKEN_EXPIRES_IN',
   );
-  const refreshToken = generateToken(
-    user._id,
-    'JWT_REFRESH_TOKEN_SECRET',
-    'JWT_REFRESH_TOKEN_EXPIRES_IN',
-  );
-
-  user.loginAt = new Date();
-  user.refreshToken = refreshToken;
-  await user.save({ validateBeforeSave: false });
 
   const {
+    role,
     loginAt,
-    password,
     deleteAt,
+    password,
     isVerified,
     accountState,
-    refreshToken: refreshAccessToken,
+    refreshToken,
     ...restUserData
   } = user.toObject();
 
-  return { user: restUserData, accessToken, refreshToken };
+  return { user: restUserData, accessToken, refreshToken: refreshTokenValue };
 };
 
-export const refreshAccessToken = async (refreshToken: string) => {
+export const refreshAccessToken = async (res: Response, refreshToken: string): Promise<string> => {
   if (!refreshToken) {
     throw new AppError('Refresh token missing', RESPONSE_STATUSES.UNAUTHORIZED);
   }
 
-  const payload = verifyToken(refreshToken, 'JWT_REFRESH_TOKEN_SECRET');
+  // Clear the old cookie immediately
+  clearCookieValue(res, 'refreshToken');
 
+  let payload;
+  try {
+    payload = verifyToken(refreshToken, 'JWT_REFRESH_TOKEN_SECRET');
+  } catch (err) {
+    payload = null;
+  }
+
+  // If token can't be verified, stop here
   if (!payload) {
-    throw new AppError('Invalid refresh token', RESPONSE_STATUSES.FORBIDDEN);
+    throw new AppError('Invalid or expired refresh token', RESPONSE_STATUSES.FORBIDDEN);
   }
 
-  const user = await User.findById(payload.userId).select('+refreshToken');
+  // Find user by refresh token
+  const user = await User.findOne({ refreshToken }).select('+refreshToken');
+  const newRefreshToken = generateToken(
+    payload.data,
+    'JWT_REFRESH_TOKEN_SECRET',
+    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+  );
 
-  if (!user || user.refreshToken !== refreshToken) {
-    throw new AppError('Refresh token mismatch', RESPONSE_STATUSES.FORBIDDEN);
+  if (!user) {
+    // Token reuse detected
+    console.warn('Refresh token reuse detected!');
+    const hackedUser = await User.findById(payload.data);
+    if (hackedUser) {
+      hackedUser.refreshToken = [];
+      await hackedUser.save();
+    }
+
+    throw new AppError(
+      'Token reuse attempt detected. Please login again.',
+      RESPONSE_STATUSES.FORBIDDEN,
+    );
   }
+
+  // Token is valid and user exists → rotate refresh token
+  user.refreshToken = user.refreshToken.filter((rt) => rt !== refreshToken);
+  user.refreshToken.push(newRefreshToken);
+  await user.save();
+
+  // Set new refresh token in cookie
+  setValueToCookies(res, 'refreshToken', newRefreshToken);
 
   const newAccessToken = generateToken(
     user._id.toString(),
-    'JWT_REFRESH_TOKEN_SECRET',
-    'JWT_REFRESH_TOKEN_EXPIRES_IN',
+    'JWT_ACCESS_TOKEN_SECRET',
+    'JWT_ACCESS_TOKEN_EXPIRES_IN',
   );
 
   return newAccessToken;

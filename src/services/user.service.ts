@@ -198,7 +198,7 @@ export const logout = async (id: Types.ObjectId) => {
     throw new AppError('No user found for that id', RESPONSE_STATUSES.NOT_FOUND);
   }
 
-  currentUser.refreshToken = undefined;
+  currentUser.refreshToken = [];
   await currentUser.save({ validateBeforeSave: false });
 
   return;

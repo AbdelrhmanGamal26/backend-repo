@@ -13,8 +13,8 @@ export const createUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const loginUser = async (req: CustomRequest, res: Response) => {
-  const { user, accessToken, refreshToken } = await authServices.login(req.body);
-  setValueToCookies(res, 'accessToken', accessToken);
+  const jwt = req.cookies?.refreshToken || '';
+  const { user, accessToken, refreshToken } = await authServices.login(req.body, res, jwt);
   setValueToCookies(res, 'refreshToken', refreshToken, REFRESH_TOKEN_MAX_AGE);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
@@ -25,9 +25,8 @@ export const loginUser = async (req: CustomRequest, res: Response) => {
 };
 
 export const refreshAccessToken = async (req: CustomRequest, res: Response) => {
-  const newAccessToken = await authServices.refreshAccessToken(req.cookies?.refreshToken);
-  setValueToCookies(res, 'accessToken', newAccessToken);
-  res.status(RESPONSE_STATUSES.SUCCESS).json({ message: 'Access token refreshed' });
+  const newAccessToken = await authServices.refreshAccessToken(res, req.cookies?.refreshToken);
+  res.status(RESPONSE_STATUSES.SUCCESS).json({ data: { accessToken: newAccessToken } });
 };
 
 export const forgotPassword = async (req: CustomRequest, res: Response) => {

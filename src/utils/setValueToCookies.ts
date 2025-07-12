@@ -1,11 +1,9 @@
 import { Response } from 'express';
+import { cookieOptions } from '../constants/general';
 
 const setValueToCookies = (res: Response, cookieName: string, value: string, maxAge?: number) => {
   res.cookie(cookieName, value, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
-    path: '/',
+    ...cookieOptions,
     maxAge: maxAge || 15 * 60 * 1000, // 15 minutes unless set to another value
   });
 };

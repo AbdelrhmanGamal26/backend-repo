@@ -23,3 +23,10 @@ export const BULL_ACCOUNT_JOB_NAME = {
 } as const;
 
 export const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+export const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict' as const,
+  path: '/',
+};

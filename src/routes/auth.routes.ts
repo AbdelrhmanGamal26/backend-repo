@@ -25,6 +25,8 @@ authRouter.post(
   catchAsync(authController.loginUser),
 );
 
+authRouter.get('/refresh-token', catchAsync(authController.refreshAccessToken));
+
 authRouter.post(
   '/forgot-password',
   bodyValidationMiddleware(userForgotPasswordSchema),
@@ -55,7 +57,5 @@ authRouter.post(
   bodyValidationMiddleware(userForgotPasswordSchema),
   catchAsync(authController.resendVerificationToken),
 );
-
-authRouter.get('/refresh-token', catchAsync(authController.refreshAccessToken));
 
 export default authRouter;

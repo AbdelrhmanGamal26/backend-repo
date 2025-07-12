@@ -1,12 +1,8 @@
 import { Response } from 'express';
+import { cookieOptions } from '../constants/general';
 
 const clearCookieValue = (res: Response, cookieName: string) => {
-  res.clearCookie(cookieName, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
-    path: '/',
-  });
+  res.clearCookie(cookieName, cookieOptions);
 };
 
 export default clearCookieValue;

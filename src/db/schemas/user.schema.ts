@@ -87,7 +87,8 @@ const userSchema = new Schema<UserDocument>(
       select: false,
     },
     refreshToken: {
-      type: String,
+      type: [String],
+      default: [],
       select: false,
     },
   },

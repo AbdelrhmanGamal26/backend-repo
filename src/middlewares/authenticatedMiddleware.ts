@@ -3,14 +3,14 @@ import AppError from '../utils/appError';
 import { verifyToken } from '../utils/jwt';
 import catchAsync from '../utils/catchAsync';
 import User from '../db/schemas/user.schema';
-import getTokenValue from '../utils/getTokenValue';
 import { CustomRequest } from '../@types/generalTypes';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { isTokenBlacklisted } from '../utils/tokenBlackListingUtils';
+import getTokenValueFromCookies from '../utils/getTokenValueFromCookies';
 
 const authenticatedMiddleware = catchAsync(
   async (req: CustomRequest, _res: Response, next: NextFunction) => {
-    const token = getTokenValue(req, 'accessToken') || req.headers.authorization?.split(' ')[1];
+    const token =
+      req.headers.authorization?.split(' ')[1] || getTokenValueFromCookies(req, 'accessToken');
 
     if (!token) {
       return next(
@@ -19,10 +19,6 @@ const authenticatedMiddleware = catchAsync(
           RESPONSE_STATUSES.UNAUTHORIZED,
         ),
       );
-    }
-
-    if (await isTokenBlacklisted(token)) {
-      return next(new AppError('Token has been invalidated', RESPONSE_STATUSES.UNAUTHORIZED));
     }
 
     const decoded = verifyToken(token, 'JWT_ACCESS_TOKEN_SECRET');
