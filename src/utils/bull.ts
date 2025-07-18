@@ -75,18 +75,19 @@ emailWorker.on('failed', async (job: Job | undefined, err: Error) => {
   if (currentUser && currentUser.accountActivationEmailSentStatus !== EMAIL_SENT_STATUS.SUCCESS) {
     try {
       await dailyRetryQueue.add(BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION, job.data, {
-        delay: DURATIONS.BULL_JOB_FAILURE_RETRY_DURATION,
+        delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
         jobId: `daily-email-${job.data.userData.email}-${Date.now()}`,
         attempts: 2,
         backoff: {
           type: 'fixed',
-          delay: DURATIONS.BULL_JOB_FAILURE_RETRY_DURATION,
+          delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
         },
       });
     } catch (error) {
       console.log(`Account activation job addition to the retry queue failed: ${error}`);
       currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
       await currentUser.save({ validateBeforeSave: false });
+      throw error;
     }
   }
 });
@@ -103,7 +104,7 @@ export const accountWorker = new Worker(
     try {
       await sendEmail({
         email: data.userData.email,
-        subject: 'Account permanent deletion reminder (3 days remains)',
+        subject: 'Account permanent deletion reminder (3 days remaining)',
         message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
           name: data.userData.name,
         }),
@@ -148,12 +149,12 @@ accountWorker.on('failed', async (job: Job | undefined, err: Error) => {
   ) {
     try {
       await dailyRetryQueue.add(BULL_ACCOUNT_JOB_NAME.SEND_REMINDER, job.data, {
-        delay: DURATIONS.BULL_JOB_FAILURE_RETRY_DURATION,
+        delay: DURATIONS.BULL_JOB_FAILED_SENDING_DELAY_PERIOD,
         jobId: `daily-reminder-${job.data.userData.email}-${Date.now()}`, // Unique ID,
         attempts: 2,
         backoff: {
           type: 'fixed',
-          delay: DURATIONS.BULL_JOB_FAILURE_RETRY_DURATION,
+          delay: DURATIONS.BULL_JOB_FAILED_SENDING_DELAY_PERIOD,
         },
       });
     } catch (error) {
@@ -188,7 +189,7 @@ export const dailyRetryWorker = new Worker(
       if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_REMINDER) {
         await sendEmail({
           email: data.userData.email,
-          subject: 'Account permanent deletion reminder (3 days remains)',
+          subject: `Account permanent deletion reminder (${2 - job.attemptsMade} days remaining)`,
           message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
             name: data.userData.name,
           }),
@@ -265,7 +266,7 @@ export const getBullJobSettings = (initialDelay: number, jobId: string) => {
     attempts: BULL_JOB_ATTEMPTS,
     backoff: {
       type: 'exponential',
-      delay: DURATIONS.BULL_JOB_FAILURE_RETRY_DURATION,
+      delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
     },
   };
 };
