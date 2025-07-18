@@ -1,11 +1,11 @@
 import { Types } from 'mongoose';
 import { Response } from 'express';
 import { verifyToken } from '../utils/jwt';
+import DURATIONS from '../constants/durations';
 import { CustomRequest } from '../@types/generalTypes';
 import * as userServices from '../services/user.service';
 import clearCookieValue from '../utils/clearCookieValue';
 import setValueToCookies from '../utils/setValueToCookies';
-import { REFRESH_TOKEN_MAX_AGE } from '../constants/general';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import getTokenValueFromHeaders from '../utils/getTokenValueFromHeaders';
 
@@ -60,7 +60,7 @@ export const updateUserPassword = async (req: CustomRequest, res: Response) => {
     confirmNewPassword,
   );
 
-  setValueToCookies(res, 'refreshToken', refreshToken, REFRESH_TOKEN_MAX_AGE);
+  setValueToCookies(res, 'refreshToken', refreshToken, DURATIONS.REFRESH_TOKEN_MAX_AGE);
 
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {

@@ -4,10 +4,10 @@ import {
   forgotPasswordEmailTemplate,
   emailVerificationEmailTemplate,
 } from '../constants/emailTemplates';
-import sendEmail from '../utils/email';
 import AppError from '../utils/appError';
+import sendEmail from '../utils/nodemailer';
 import User from '../db/schemas/user.schema';
-import { accountQueue } from '../utils/bull';
+import DURATIONS from '../constants/durations';
 import { hashToken } from '../utils/generalUtils';
 import { userIsVerified } from '../utils/userUtils';
 import clearCookieValue from '../utils/clearCookieValue';
@@ -15,17 +15,18 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
+import { accountQueue, emailQueue, getBullJobSettings } from '../utils/bull';
 import handlebarsEmailTemplateCompiler from '../utils/handlebarsEmailTemplateCompiler';
 import { BULL_ACCOUNT_JOB_NAME, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 
-interface CreatedUserType {
+type CreatedUserType = {
   name: string;
   email: string;
   password: string;
   confirmPassword: string;
-}
+};
 
 export const createUser = async (data: CreatedUserType) => {
   const createdUser = await User.create(data);
@@ -34,10 +35,12 @@ export const createUser = async (data: CreatedUserType) => {
     throw new AppError('Failed to create user', RESPONSE_STATUSES.SERVER);
   }
 
-  const verificationToken = createdUser.createEmailVerificationToken(60 * 60 * 1000);
   createdUser.signupAt = new Date();
   createdUser.timeToDeleteAfterSignupWithoutActivation = new Date(
-    Date.now() + 14 * 24 * 60 * 60 * 1000,
+    Date.now() + DURATIONS.TIME_TO_DELETE_AFTER_SIGNUP_WITHOUT_ACTIVATION,
+  );
+  const verificationToken = createdUser.createEmailVerificationToken(
+    DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
   );
   await createdUser.save({
     validateBeforeSave: false,
@@ -46,21 +49,35 @@ export const createUser = async (data: CreatedUserType) => {
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
 
   try {
-    await accountQueue.remove(`email-${createdUser._id}`); // Clean up first
-    await accountQueue.add(
+    await emailQueue.remove(`email-${createdUser._id}`); // Clean up job queue first
+    await accountQueue.remove(`reminder-${createdUser._id}`); // Clean up job queue first
+    await emailQueue.add(
       BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION,
-      { userData: { email: createdUser.email, name: createdUser.name }, verificationUrl },
-      { delay: 5000, jobId: `email-${createdUser._id}` },
+      {
+        userData: {
+          email: createdUser.email,
+          name: createdUser.name,
+        },
+        verificationUrl,
+        userId: createdUser._id,
+      },
+      getBullJobSettings(
+        DURATIONS.SEND_EMAIL_VERIFICATION_DELAY_PERIOD,
+        `email-${createdUser._id}`,
+      ),
     );
 
     // send delete account permanently reminder email if user does not activate
     await accountQueue.add(
       BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
-      { email: createdUser.email, name: createdUser.name },
       {
-        delay: 3 * 24 * 60 * 60 * 1000,
-        jobId: `reminder-${createdUser._id}`,
+        userData: {
+          email: createdUser.email,
+          name: createdUser.name,
+        },
+        userId: createdUser._id,
       },
+      getBullJobSettings(DURATIONS.EMAIL_REMINDER_DELAY_PERIOD, `reminder-${createdUser._id}`),
     );
   } catch (err) {
     createdUser.verifyEmailToken = undefined;
@@ -126,6 +143,7 @@ export const login = async (
   const newRefreshTokenArray = await rotateRefreshToken(res, jwt, refreshTokenValue, user, User);
 
   user.loginAt = new Date();
+  user.logoutAt = undefined;
   user.refreshToken = [...newRefreshTokenArray];
   await user.save({ validateBeforeSave: false });
 
@@ -304,7 +322,7 @@ export const verifyEmail = async (verificationToken: string): Promise<string> =>
   user.timeToDeleteAfterSignupWithoutActivation = undefined;
   await user.save();
 
-  await accountQueue.remove(`email-${user._id}`);
+  await emailQueue.remove(`email-${user._id}`);
   await accountQueue.remove(`reminder-${user._id}`);
 
   return EMAIL_VERIFICATION_STATUSES.VERIFIED;
@@ -321,9 +339,11 @@ export const resendVerificationToken = async (email: string): Promise<string | v
     return EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED;
   }
 
-  await accountQueue.remove(`email-${user._id}`);
+  await emailQueue.remove(`email-${user._id}`);
 
-  const verificationToken = user.createEmailVerificationToken(10 * 60 * 1000);
+  const verificationToken = user.createEmailVerificationToken(
+    DURATIONS.RESENT_EMAIL_VERIFICATION_TOKEN_AGE,
+  );
   await user.save({ validateBeforeSave: false });
 
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;

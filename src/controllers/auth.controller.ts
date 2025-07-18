@@ -1,21 +1,22 @@
 import { Response } from 'express';
+import DURATIONS from '../constants/durations';
 import { CustomRequest } from '../@types/generalTypes';
 import * as authServices from '../services/auth.service';
 import setValueToCookies from '../utils/setValueToCookies';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { EMAIL_VERIFICATION_STATUSES, REFRESH_TOKEN_MAX_AGE } from '../constants/general';
+import { EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
   await authServices.createUser(req.body);
   res.status(RESPONSE_STATUSES.CREATED).json({
-    message: 'check your email inbox for the account verification email',
+    message: 'Please check your email inbox for the account verification email',
   });
 };
 
 export const loginUser = async (req: CustomRequest, res: Response) => {
   const jwt = req.cookies?.refreshToken || '';
   const { user, accessToken, refreshToken } = await authServices.login(req.body, res, jwt);
-  setValueToCookies(res, 'refreshToken', refreshToken, REFRESH_TOKEN_MAX_AGE);
+  setValueToCookies(res, 'refreshToken', refreshToken, DURATIONS.REFRESH_TOKEN_MAX_AGE);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
       accessToken,

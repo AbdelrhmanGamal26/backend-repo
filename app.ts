@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import DURATIONS from './src/constants/durations';
 import { bootstrap } from './src/routes/index.routes';
 import { CORS_ORIGINS } from './src/constants/general';
 import { isDevelopment } from './src/utils/generalUtils';
@@ -24,7 +25,7 @@ if (isDevelopment) {
 
 const limiter = rateLimit({
   limit: 100,
-  windowMs: 60 * 60 * 1000,
+  windowMs: DURATIONS.RATE_LIMIT_WINDOW,
   message: 'Too many requests from this IP. Please try again in one hour',
 });
 

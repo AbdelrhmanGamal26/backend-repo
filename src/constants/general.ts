@@ -22,7 +22,11 @@ export const BULL_ACCOUNT_JOB_NAME = {
   SEND_REMINDER: 'send-reminder',
 } as const;
 
-export const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+export const EMAIL_SENT_STATUS = {
+  SUCCESS: 'success',
+  FAILED: 'failed',
+  PENDING: 'pending',
+} as const;
 
 export const cookieOptions = {
   httpOnly: true,

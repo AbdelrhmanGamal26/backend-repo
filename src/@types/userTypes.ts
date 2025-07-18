@@ -16,9 +16,14 @@ export interface UserSchemaFields {
   signupAt?: Date;
   timeToDeleteAfterSignupWithoutActivation?: Date;
   loginAt?: Date;
-  isVerified: boolean;
+  logoutAt?: Date;
+  accountActivationEmailSentStatus?: string;
+  accountActivationEmailSentAt?: Date;
+  accountInactivationReminderEmailSentStatus?: string;
+  accountInactivationReminderEmailSentAt?: Date;
   verifiedAt?: Date;
   deleteAt?: Date;
+  isVerified: boolean;
   refreshToken: string[];
 }
 

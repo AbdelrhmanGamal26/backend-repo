@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import DURATIONS from '../../constants/durations';
 import { HydratedDocument, Schema, model } from 'mongoose';
 import { UserDocument, UserSchemaFields } from '../../@types/userTypes';
+import { ACCOUNT_STATES, EMAIL_SENT_STATUS, USER_ROLES } from '../../constants/general';
 
 const userSchema = new Schema<UserDocument>(
   {
@@ -20,8 +22,8 @@ const userSchema = new Schema<UserDocument>(
     photo: String,
     role: {
       type: String,
-      enum: ['admin', 'user'],
-      default: 'user',
+      enum: [USER_ROLES.ADMIN, USER_ROLES.USER] as const,
+      default: USER_ROLES.USER,
       immutable: true,
     },
     password: {
@@ -55,8 +57,8 @@ const userSchema = new Schema<UserDocument>(
     },
     accountState: {
       type: String,
-      enum: ['active', 'inactive'],
-      default: 'active',
+      enum: [ACCOUNT_STATES.ACTIVE, ACCOUNT_STATES.INACTIVE] as const,
+      default: ACCOUNT_STATES.ACTIVE,
       select: false,
     },
     signupAt: {
@@ -71,6 +73,40 @@ const userSchema = new Schema<UserDocument>(
     },
     loginAt: {
       type: Date,
+      select: false,
+    },
+    logoutAt: {
+      type: Date,
+      select: false,
+    },
+    accountActivationEmailSentStatus: {
+      type: String,
+      enum: [
+        EMAIL_SENT_STATUS.SUCCESS,
+        EMAIL_SENT_STATUS.FAILED,
+        EMAIL_SENT_STATUS.PENDING,
+      ] as const,
+      default: EMAIL_SENT_STATUS.PENDING,
+      select: false,
+    },
+    accountActivationEmailSentAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    accountInactivationReminderEmailSentStatus: {
+      type: String,
+      enum: [
+        EMAIL_SENT_STATUS.SUCCESS,
+        EMAIL_SENT_STATUS.FAILED,
+        EMAIL_SENT_STATUS.PENDING,
+      ] as const,
+      default: EMAIL_SENT_STATUS.PENDING,
+      select: false,
+    },
+    accountInactivationReminderEmailSentAt: {
+      type: Date,
+      default: null,
       select: false,
     },
     isVerified: {
@@ -101,7 +137,7 @@ const userSchema = new Schema<UserDocument>(
 // TTL index — only works on Date fields with `expireAfterSeconds`
 // userSchema.index({ timeToDeleteAfterSignupWithoutActivation: 1 }, { expireAfterSeconds: 0 });
 
-const SALT_ROUNDS: number = 12;
+const SALT_ROUNDS: number = 12 as const;
 
 userSchema.pre(
   /^save/,
@@ -142,7 +178,7 @@ userSchema.methods.createPasswordResetToken = function (): string {
 
   this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-  this.passwordResetTokenExpires = Date.now() + 10 * 60 * 1000;
+  this.passwordResetTokenExpires = Date.now() + DURATIONS.PASSWORD_RESET_TOKEN_EXPIRATION_PERIOD;
 
   return resetToken;
 };
