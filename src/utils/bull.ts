@@ -11,7 +11,7 @@ import { logCompletedJob, logFailedJob } from './logging';
 import { BULL_ACCOUNT_JOB_NAME, EMAIL_SENT_STATUS } from '../constants/general';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
-export const redisConnection: RedisOptions = {
+const redisConnection: RedisOptions = {
   host: '127.0.0.1',
   port: 6379,
 };
@@ -63,10 +63,8 @@ emailWorker.on('completed', async (job: Job) => {
   }
 });
 
-emailWorker.on('failed', async (job: Job | undefined, err: Error) => {
+emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
-
-  console.log(`Failed to send email to ${job.data.userData.email}.`, err);
 
   const userId = job.data.userId as Types.ObjectId;
 
@@ -84,10 +82,8 @@ emailWorker.on('failed', async (job: Job | undefined, err: Error) => {
         },
       });
     } catch (error) {
-      console.log(`Account activation job addition to the retry queue failed: ${error}`);
       currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
       await currentUser.save({ validateBeforeSave: false });
-      throw error;
     }
   }
 });
@@ -134,10 +130,8 @@ accountWorker.on('completed', async (job: Job) => {
   }
 });
 
-accountWorker.on('failed', async (job: Job | undefined, err: Error) => {
+accountWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
-
-  console.log(`Failed to send email to ${job.data.userData.email}.`, err);
 
   const userId = job.data.userId as Types.ObjectId;
 
@@ -198,7 +192,6 @@ export const dailyRetryWorker = new Worker(
 
       logCompletedJob(job);
     } catch (err) {
-      console.error(`Failed sending ${job.name} to ${data.userData.email}`, err);
       logFailedJob(job, err);
       throw err;
     }
@@ -211,8 +204,6 @@ export const dailyRetryWorker = new Worker(
 
 // Daily retry worker events
 dailyRetryWorker.on('completed', async (job: Job) => {
-  console.log(`Daily retry job ${job.id} completed successfully`);
-
   try {
     const userId = job.data.userId as Types.ObjectId;
 
@@ -230,13 +221,12 @@ dailyRetryWorker.on('completed', async (job: Job) => {
       await currentUser.save({ validateBeforeSave: false });
     }
   } catch (error) {
-    console.error('Failed to update user status after retry completion:', error);
+    console.error('Failed to update user status after retry completion.');
   }
 });
 
-dailyRetryWorker.on('failed', async (job: Job | undefined, err: Error) => {
+dailyRetryWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
-  console.error(`Daily retry job ${job.id} failed:`, err);
 
   try {
     const userId = job.data.userId as Types.ObjectId;
@@ -253,7 +243,7 @@ dailyRetryWorker.on('failed', async (job: Job | undefined, err: Error) => {
       await currentUser.save({ validateBeforeSave: false });
     }
   } catch (error) {
-    console.error('Failed to update user status after retry failure:', error);
+    console.error('Failed to update user status after retry completion.');
   }
 });
 
