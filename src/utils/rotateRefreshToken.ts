@@ -1,5 +1,5 @@
-import { Model } from 'mongoose';
 import { Response } from 'express';
+import User from '../db/schemas/user.schema';
 import clearCookieValue from './clearCookieValue';
 import { UserDocument } from '../@types/userTypes';
 
@@ -8,7 +8,6 @@ const rotateRefreshToken = async (
   oldToken: string,
   newToken: string,
   user: UserDocument,
-  User: Model<UserDocument>,
 ): Promise<string[]> => {
   let updatedTokens = user.refreshToken || [];
 
@@ -17,7 +16,7 @@ const rotateRefreshToken = async (
     const tokenExists = await User.findOne({ refreshToken: oldToken }).select('+refreshToken');
 
     if (!tokenExists) {
-      console.warn('⚠️ Attempted refresh token reuse at login!');
+      console.warn('Attempted refresh token reuse at login!');
 
       // Invalidate all tokens
       user.refreshToken = [];

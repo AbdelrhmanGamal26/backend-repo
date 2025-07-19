@@ -1,6 +1,6 @@
 export const USER_ROLES = {
-  ADMIN: 'admin',
   USER: 'user',
+  ADMIN: 'admin',
 } as const;
 
 export const ACCOUNT_STATES = {
@@ -12,25 +12,27 @@ export const CORS_ORIGINS: string[] = ['http://localhost:3000', 'http://localhos
 
 export const EMAIL_VERIFICATION_STATUSES = {
   INVALID: 'invalid',
-  INVALID_OR_EXPIRED: 'invalid_or_expired',
-  ALREADY_VERIFIED: 'already_verified',
   VERIFIED: 'verified',
+  ALREADY_VERIFIED: 'already_verified',
+  INVALID_OR_EXPIRED: 'invalid_or_expired',
 } as const;
 
 export const BULL_ACCOUNT_JOB_NAME = {
-  SEND_EMAIL_VERIFICATION: 'send-email-verification',
+  SEND_FORGOT: 'send-forgot',
+  SEND_REMOVAL: 'send-removal',
   SEND_REMINDER: 'send-reminder',
+  SEND_EMAIL_VERIFICATION: 'send-email-verification',
 } as const;
 
 export const EMAIL_SENT_STATUS = {
-  SUCCESS: 'success',
   FAILED: 'failed',
   PENDING: 'pending',
+  SUCCESS: 'success',
 } as const;
 
 export const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
   path: '/',
+  httpOnly: true,
+  sameSite: 'strict' as const,
+  secure: process.env.NODE_ENV === 'production',
 };

@@ -1,15 +1,18 @@
 import { Types } from 'mongoose';
 import { Queue, Worker, RedisOptions, Job } from 'bullmq';
 import {
-  resendVerificationEmailTemplate,
+  forgotPasswordEmailTemplate,
+  accountDeletionEmailTemplate,
+  accountVerificationEmailTemplate,
   accountDeletionReminderEmailTemplate,
 } from '../constants/emailTemplates';
 import sendEmail from './nodemailer';
 import User from '../db/schemas/user.schema';
-import DURATIONS from '../constants/durations';
+import { EMAIL_SENT_STATUS } from '../constants/general';
 import { logCompletedJob, logFailedJob } from './logging';
-import { BULL_ACCOUNT_JOB_NAME, EMAIL_SENT_STATUS } from '../constants/general';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
+
+const concurrency = 5;
 
 const redisConnection: RedisOptions = {
   host: '127.0.0.1',
@@ -29,7 +32,7 @@ export const emailWorker = new Worker(
       await sendEmail({
         email: data.userData.email,
         subject: 'Your account verification token (valid for 1 hour)',
-        message: handlebarsEmailTemplateCompiler(resendVerificationEmailTemplate, {
+        message: handlebarsEmailTemplateCompiler(accountVerificationEmailTemplate, {
           name: data.userData.name,
           verificationUrl: data.verificationUrl,
         }),
@@ -47,7 +50,7 @@ export const emailWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 5,
+    concurrency,
   },
 );
 
@@ -58,7 +61,7 @@ emailWorker.on('completed', async (job: Job) => {
 
   if (user) {
     user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
-    user.accountActivationEmailSentAt = new Date(Date.now());
+    user.accountActivationEmailSentAt = new Date();
     user.save({ validateBeforeSave: false });
   }
 });
@@ -68,41 +71,33 @@ emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
 
   const userId = job.data.userId as Types.ObjectId;
 
-  // Check if we should retry (check current user status from DB)
   const currentUser = await User.findById(userId);
   if (currentUser && currentUser.accountActivationEmailSentStatus !== EMAIL_SENT_STATUS.SUCCESS) {
-    try {
-      await dailyRetryQueue.add(BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION, job.data, {
-        delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
-        jobId: `daily-email-${job.data.userData.email}-${Date.now()}`,
-        attempts: 2,
-        backoff: {
-          type: 'fixed',
-          delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
-        },
-      });
-    } catch (error) {
-      currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
-      await currentUser.save({ validateBeforeSave: false });
-    }
+    currentUser.verifyEmailToken = undefined;
+    currentUser.verifyEmailTokenExpires = undefined;
+    currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
+    await currentUser.save({ validateBeforeSave: false });
   }
+
+  // logger.error('Failed to queue email verification job', err);   *this is for later*
 });
 
-export const accountQueue = new Queue('account-queue', {
+export const forgotPasswordQueue = new Queue('forgot-queue', {
   connection: redisConnection,
 });
 
-export const accountWorker = new Worker(
-  'account-queue',
+export const forgotPasswordWorker = new Worker(
+  'forgot-queue',
   async (job) => {
     const data = job.data;
 
     try {
       await sendEmail({
         email: data.userData.email,
-        subject: 'Account permanent deletion reminder (3 days remaining)',
-        message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
+        subject: 'Your password reset token (valid for 10 minutes)',
+        message: handlebarsEmailTemplateCompiler(forgotPasswordEmailTemplate, {
           name: data.userData.name,
+          resetURL: data.resetUrl,
         }),
       });
 
@@ -114,23 +109,84 @@ export const accountWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 5,
+    concurrency,
   },
 );
 
-accountWorker.on('completed', async (job: Job) => {
+forgotPasswordWorker.on('completed', async (job: Job) => {
+  const userId = job.data.userId as Types.ObjectId;
+
+  const currentUser = await User.findById(userId);
+
+  if (currentUser) {
+    console.log('Check your email for the reset password form');
+    // logger.success(`Email sent to user: ${currentUser.name}`);   *this is for later*
+  }
+  // logger.error('Failed to queue email verification job', err);   *this is for later*
+});
+
+forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
+  if (!job) return;
+
+  const userId = job.data.userId as Types.ObjectId;
+
+  const currentUser = await User.findById(userId);
+
+  if (currentUser) {
+    currentUser.passwordResetToken = undefined;
+    currentUser.passwordResetTokenExpires = undefined;
+    await currentUser.save({ validateBeforeSave: false });
+  }
+  // logger.error('Failed to queue email verification job', err);   *this is for later*
+});
+
+export const reminderQueue = new Queue('reminder-queue', {
+  connection: redisConnection,
+});
+
+export const reminderWorker = new Worker(
+  'reminder-queue',
+  async (job) => {
+    const data = job.data;
+
+    const gracePeriod = 3;
+    const remainingPeriod = gracePeriod - job.attemptsMade;
+
+    try {
+      await sendEmail({
+        email: data.userData.email,
+        subject: `Account permanent deletion reminder (${remainingPeriod} days remaining)`,
+        message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
+          name: data.userData.name,
+          remainingPeriod: `${remainingPeriod}`,
+        }),
+      });
+
+      logCompletedJob(job);
+    } catch (err) {
+      logFailedJob(job, err);
+      throw err;
+    }
+  },
+  {
+    connection: redisConnection,
+    concurrency,
+  },
+);
+
+reminderWorker.on('completed', async (job: Job) => {
   const userId = job.data.userId as Types.ObjectId;
 
   const user = await User.findById(userId);
 
   if (user) {
     user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
-    user.accountInactivationReminderEmailSentAt = new Date(Date.now());
+    user.accountInactivationReminderEmailSentAt = new Date();
     await user.save({ validateBeforeSave: false });
   }
 });
 
-accountWorker.on('failed', async (job: Job | undefined, _err: Error) => {
+reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
   const userId = job.data.userId as Types.ObjectId;
@@ -141,55 +197,29 @@ accountWorker.on('failed', async (job: Job | undefined, _err: Error) => {
     currentUser &&
     currentUser.accountInactivationReminderEmailSentStatus !== EMAIL_SENT_STATUS.SUCCESS
   ) {
-    try {
-      await dailyRetryQueue.add(BULL_ACCOUNT_JOB_NAME.SEND_REMINDER, job.data, {
-        delay: DURATIONS.BULL_JOB_FAILED_SENDING_DELAY_PERIOD,
-        jobId: `daily-reminder-${job.data.userData.email}-${Date.now()}`, // Unique ID,
-        attempts: 2,
-        backoff: {
-          type: 'fixed',
-          delay: DURATIONS.BULL_JOB_FAILED_SENDING_DELAY_PERIOD,
-        },
-      });
-    } catch (error) {
-      console.log(`Account deletion reminder job addition to the retry queue failed: ${error}`);
-      currentUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
-      await currentUser.save({ validateBeforeSave: false });
-    }
+    currentUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
+    currentUser.accountInactivationReminderEmailSentAt = undefined;
+    await currentUser.save({ validateBeforeSave: false });
   }
 });
 
-export const dailyRetryQueue = new Queue('daily-retry-queue', {
+export const accountRemovalQueue = new Queue('removal-queue', {
   connection: redisConnection,
 });
 
-export const dailyRetryWorker = new Worker(
-  'daily-retry-queue',
+export const accountRemovalWorker = new Worker(
+  'removal-queue',
   async (job) => {
     const data = job.data;
 
     try {
-      if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION) {
-        await sendEmail({
-          email: data.userData.email,
-          subject: 'Your account verification token (valid for 1 hour)',
-          message: handlebarsEmailTemplateCompiler(resendVerificationEmailTemplate, {
-            name: data.userData.name,
-            verificationUrl: data.verificationUrl,
-          }),
-        });
-      }
-
-      if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_REMINDER) {
-        await sendEmail({
-          email: data.userData.email,
-          subject: `Account permanent deletion reminder (${2 - job.attemptsMade} days remaining)`,
-          message: handlebarsEmailTemplateCompiler(accountDeletionReminderEmailTemplate, {
-            name: data.userData.name,
-          }),
-        });
-      }
-
+      await sendEmail({
+        email: data.userData.email,
+        subject: 'Account permanent deletion.',
+        message: handlebarsEmailTemplateCompiler(accountDeletionEmailTemplate, {
+          name: data.userData.name,
+        }),
+      });
       logCompletedJob(job);
     } catch (err) {
       logFailedJob(job, err);
@@ -198,65 +228,40 @@ export const dailyRetryWorker = new Worker(
   },
   {
     connection: redisConnection,
-    concurrency: 5,
+    concurrency,
   },
 );
 
-// Daily retry worker events
-dailyRetryWorker.on('completed', async (job: Job) => {
-  try {
-    const userId = job.data.userId as Types.ObjectId;
+accountRemovalWorker.on('completed', async (job) => {
+  const userId = job.data.userId as Types.ObjectId;
 
-    const currentUser = await User.findById(userId);
+  await User.findByIdAndDelete(userId);
 
-    if (currentUser) {
-      if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION) {
-        currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
-        currentUser.accountActivationEmailSentAt = new Date(Date.now());
-      } else if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_REMINDER) {
-        currentUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
-        currentUser.accountInactivationReminderEmailSentAt = new Date(Date.now());
-      }
-
-      await currentUser.save({ validateBeforeSave: false });
-    }
-  } catch (error) {
-    console.error('Failed to update user status after retry completion.');
-  }
+  return;
 });
 
-dailyRetryWorker.on('failed', async (job: Job | undefined, _err: Error) => {
+accountRemovalWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  try {
-    const userId = job.data.userId as Types.ObjectId;
-
-    const currentUser = await User.findById(userId);
-
-    if (currentUser) {
-      if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION) {
-        currentUser.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
-      } else if (job.name === BULL_ACCOUNT_JOB_NAME.SEND_REMINDER) {
-        currentUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.FAILED;
-      }
-
-      await currentUser.save({ validateBeforeSave: false });
-    }
-  } catch (error) {
-    console.error('Failed to update user status after retry completion.');
-  }
+  // const userId = job.data.userId as Types.ObjectId;
+  // logger.warn(`Account deletion job for user ${userId} failed: ${err?.message}`);
 });
 
 const BULL_JOB_ATTEMPTS = 3;
 
-export const getBullJobSettings = (initialDelay: number, jobId: string) => {
+export const getBullJobSettings = (
+  initialDelay: number,
+  jobId: string,
+  backoffType: string,
+  backoffDelay: number,
+) => {
   return {
     delay: initialDelay,
     jobId,
     attempts: BULL_JOB_ATTEMPTS,
     backoff: {
-      type: 'exponential',
-      delay: DURATIONS.BULL_JOB_EMAIL_FAILURE_RETRY_DURATION,
+      type: backoffType,
+      delay: backoffDelay,
     },
   };
 };

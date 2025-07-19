@@ -1,11 +1,12 @@
 import { Types } from 'mongoose';
 import { Response } from 'express';
 import {
-  forgotPasswordEmailTemplate,
-  emailVerificationEmailTemplate,
-} from '../constants/emailTemplates';
+  sendForgotPasswordEmail,
+  sendAccountDeletionEmail,
+  sendAccountActivationEmail,
+  sendAccountDeletionReminderEmail,
+} from '../utils/bullmqJobs';
 import AppError from '../utils/appError';
-import sendEmail from '../utils/nodemailer';
 import User from '../db/schemas/user.schema';
 import DURATIONS from '../constants/durations';
 import { hashToken } from '../utils/generalUtils';
@@ -15,9 +16,8 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { accountQueue, emailQueue, getBullJobSettings } from '../utils/bull';
-import handlebarsEmailTemplateCompiler from '../utils/handlebarsEmailTemplateCompiler';
-import { BULL_ACCOUNT_JOB_NAME, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
+import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
+import { EMAIL_SENT_STATUS, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 
@@ -36,54 +36,32 @@ export const createUser = async (data: CreatedUserType) => {
   }
 
   createdUser.signupAt = new Date();
-  createdUser.timeToDeleteAfterSignupWithoutActivation = new Date(
-    Date.now() + DURATIONS.TIME_TO_DELETE_AFTER_SIGNUP_WITHOUT_ACTIVATION,
-  );
+
   const verificationToken = createdUser.createEmailVerificationToken(
     DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
   );
-  await createdUser.save({
-    validateBeforeSave: false,
-  });
+
+  await createdUser.save({ validateBeforeSave: false });
 
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
 
   try {
     await emailQueue.remove(`email-${createdUser._id}`); // Clean up job queue first
-    await accountQueue.remove(`reminder-${createdUser._id}`); // Clean up job queue first
-    await emailQueue.add(
-      BULL_ACCOUNT_JOB_NAME.SEND_EMAIL_VERIFICATION,
-      {
-        userData: {
-          email: createdUser.email,
-          name: createdUser.name,
-        },
-        verificationUrl,
-        userId: createdUser._id,
-      },
-      getBullJobSettings(
-        DURATIONS.SEND_EMAIL_VERIFICATION_DELAY_PERIOD,
-        `email-${createdUser._id}`,
-      ),
-    );
+    await sendAccountActivationEmail(createdUser, verificationUrl);
 
     // send delete account permanently reminder email if user does not activate
-    await accountQueue.add(
-      BULL_ACCOUNT_JOB_NAME.SEND_REMINDER,
-      {
-        userData: {
-          email: createdUser.email,
-          name: createdUser.name,
-        },
-        userId: createdUser._id,
-      },
-      getBullJobSettings(DURATIONS.EMAIL_REMINDER_DELAY_PERIOD, `reminder-${createdUser._id}`),
+    await reminderQueue.remove(`reminder-${createdUser._id}`); // Clean up job queue first
+    await sendAccountDeletionReminderEmail(
+      createdUser,
+      DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SIGNUP_WITHOUT_VERIFICATION_PERIOD,
+    );
+    await accountRemovalQueue.remove(`removal-${createdUser._id}`); // Clean up job queue first
+    await sendAccountDeletionEmail(
+      createdUser,
+      DURATIONS.TIME_TO_DELETE_AFTER_SIGNUP_WITHOUT_ACTIVATION,
     );
   } catch (err) {
-    createdUser.verifyEmailToken = undefined;
-    createdUser.verifyEmailTokenExpires = undefined;
-    await createdUser.save({ validateBeforeSave: false });
-    throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
+    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
 
@@ -118,9 +96,6 @@ export const login = async (
   // check user verification status
   userIsVerified(user);
 
-  // Remove any account deletion reminder job
-  await accountQueue.remove(`reminder-${user._id}`);
-
   const isPasswordCorrect = await user.correctPassword(userData.password);
 
   if (!isPasswordCorrect) {
@@ -131,6 +106,10 @@ export const login = async (
   // Reactivate user account if it's inactive and still within reactivation grace period
   await reactivateUserIfWithinGracePeriod(user);
 
+  // Remove any account deletion reminder job
+  await reminderQueue.remove(`reminder-${user._id}`);
+  await accountRemovalQueue.remove(`removal-${user._id}`);
+
   await clearLoginAttempts(userData.email);
 
   const refreshTokenValue = generateToken(
@@ -140,7 +119,7 @@ export const login = async (
   );
 
   // Handle Token Rotation
-  const newRefreshTokenArray = await rotateRefreshToken(res, jwt, refreshTokenValue, user, User);
+  const newRefreshTokenArray = await rotateRefreshToken(res, jwt, refreshTokenValue, user);
 
   user.loginAt = new Date();
   user.logoutAt = undefined;
@@ -240,23 +219,13 @@ export const forgotPassword = async (email: string): Promise<void> => {
   const resetToken = user.createPasswordResetToken();
   await user.save({ validateBeforeSave: false });
 
-  const resetURL = `${process.env.FRONTEND_URL}/reset-password?resetToken=${resetToken}`;
-  const message = handlebarsEmailTemplateCompiler(forgotPasswordEmailTemplate, {
-    name: user.name,
-    resetURL,
-  });
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?resetToken=${resetToken}`;
 
   try {
-    await sendEmail({
-      email: user.email,
-      subject: 'Your password reset token (valid for 10 minutes)',
-      message,
-    });
+    await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
+    await sendForgotPasswordEmail(user, resetUrl);
   } catch (err) {
-    user.passwordResetToken = undefined;
-    user.passwordResetTokenExpires = undefined;
-    await user.save({ validateBeforeSave: false });
-    throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
+    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
 
@@ -297,6 +266,9 @@ export const resetPassword = async (resetToken: string, password: string): Promi
   user.passwordResetToken = undefined;
   user.passwordResetTokenExpires = undefined;
   await user.save();
+
+  // Remove the password reset job
+  await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
 };
 
 export const verifyEmail = async (verificationToken: string): Promise<string> => {
@@ -319,11 +291,11 @@ export const verifyEmail = async (verificationToken: string): Promise<string> =>
   user.verifiedAt = new Date();
   user.verifyEmailToken = undefined;
   user.verifyEmailTokenExpires = undefined;
-  user.timeToDeleteAfterSignupWithoutActivation = undefined;
   await user.save();
 
   await emailQueue.remove(`email-${user._id}`);
-  await accountQueue.remove(`reminder-${user._id}`);
+  await reminderQueue.remove(`reminder-${user._id}`);
+  await accountRemovalQueue.remove(`removal-${user._id}`);
 
   return EMAIL_VERIFICATION_STATUSES.VERIFIED;
 };
@@ -339,30 +311,33 @@ export const resendVerificationToken = async (email: string): Promise<string | v
     return EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED;
   }
 
-  await emailQueue.remove(`email-${user._id}`);
+  // Optional: rate-limit resend
+  if (
+    user.accountActivationEmailSentAt &&
+    Date.now() - user.accountActivationEmailSentAt.getTime() <
+      DURATIONS.RATE_LIMIT_RESEND_TOKEN_COOLDOWN_PERIOD
+  ) {
+    throw new AppError('Please wait before requesting again', RESPONSE_STATUSES.TOO_MANY_REQUESTS);
+  }
 
   const verificationToken = user.createEmailVerificationToken(
-    DURATIONS.RESENT_EMAIL_VERIFICATION_TOKEN_AGE,
+    DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
   );
+
+  user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
   await user.save({ validateBeforeSave: false });
 
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
-  const verificationMessage = handlebarsEmailTemplateCompiler(emailVerificationEmailTemplate, {
-    name: user.name,
-    verificationUrl,
-  });
 
   try {
-    await sendEmail({
-      email: user.email,
-      subject: 'email verification token (valid for 10 minutes)',
-      message: verificationMessage,
-    });
-  } catch (err) {
-    user.verifyEmailToken = undefined;
-    user.verifyEmailTokenExpires = undefined;
-    await user.save({ validateBeforeSave: false });
+    await emailQueue.remove(`email-${user._id}`);
+    await sendAccountActivationEmail(user, verificationUrl);
 
-    throw new AppError('Failed to send email', RESPONSE_STATUSES.SERVER);
+    user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+    user.accountActivationEmailSentAt = undefined;
+    await user.save({ validateBeforeSave: false });
+  } catch (err) {
+    // logger.error('Failed to queue email verification job', err);   *this is for later*
+    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };

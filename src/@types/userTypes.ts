@@ -14,7 +14,6 @@ export interface UserSchemaFields {
   verifyEmailTokenExpires?: Date;
   accountState: string;
   signupAt?: Date;
-  timeToDeleteAfterSignupWithoutActivation?: Date;
   loginAt?: Date;
   logoutAt?: Date;
   accountActivationEmailSentStatus?: string;

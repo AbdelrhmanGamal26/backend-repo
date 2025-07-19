@@ -65,12 +65,6 @@ const userSchema = new Schema<UserDocument>(
       type: Date,
       select: false,
     },
-    timeToDeleteAfterSignupWithoutActivation: {
-      type: Date,
-      default: undefined,
-      expires: 0,
-      select: false,
-    },
     loginAt: {
       type: Date,
       select: false,
