@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import logger from './winston';
 import User from '../db/schemas/user.schema';
 import clearCookieValue from './clearCookieValue';
 import { UserDocument } from '../@types/userTypes';
@@ -16,7 +17,7 @@ const rotateRefreshToken = async (
     const tokenExists = await User.findOne({ refreshToken: oldToken }).select('+refreshToken');
 
     if (!tokenExists) {
-      console.warn('Attempted refresh token reuse at login!');
+      logger.warn('Attempted refresh token reuse at login!');
 
       // Invalidate all tokens
       user.refreshToken = [];

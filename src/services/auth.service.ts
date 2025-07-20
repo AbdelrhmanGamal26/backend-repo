@@ -6,6 +6,7 @@ import {
   sendAccountActivationEmail,
   sendAccountDeletionReminderEmail,
 } from '../utils/bullmqJobs';
+import logger from '../utils/winston';
 import AppError from '../utils/appError';
 import User from '../db/schemas/user.schema';
 import DURATIONS from '../constants/durations';
@@ -176,7 +177,7 @@ export const refreshAccessToken = async (res: Response, refreshToken: string): P
 
   if (!user) {
     // Token reuse detected
-    console.warn('Refresh token reuse detected!');
+    logger.warn('Refresh token reuse detected!');
     const hackedUser = await User.findById(payload.data);
     if (hackedUser) {
       hackedUser.refreshToken = [];

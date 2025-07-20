@@ -3,6 +3,7 @@ import AppError from '../utils/appError'; // Make sure AppError class sets isOpe
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { isDevelopment, isProduction } from '../utils/generalUtils';
 import { wrapError } from '../utils/wrapError';
+import logger from '../utils/winston';
 
 // --- DEV/PROD SENDERS (no change needed) ---
 const sendErrorDev = (err: AppError, res: Response) => {
@@ -21,19 +22,14 @@ const sendErrorProd = (err: AppError, res: Response) => {
       message: err.message,
     });
   }
-  console.error('Error 💥', err);
+  logger.error(`error: ${err}`);
   return res.status(RESPONSE_STATUSES.SERVER).json({
     status: 'error',
     message: 'Something went very wrong!',
   });
 };
 
-const globalErrorHandler = (
-  err: AppError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction
-) => {
+const globalErrorHandler = (err: AppError, _req: Request, res: Response, _next: NextFunction) => {
   const error = wrapError(err);
 
   if (isDevelopment) {

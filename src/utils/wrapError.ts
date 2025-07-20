@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import mongoose from 'mongoose';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
+import logger from './winston';
 import AppError from './appError';
 import isMongoDuplicateError from './isMongoDuplicateError';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
@@ -62,7 +63,7 @@ export function wrapError(err: unknown): AppError {
 
   // 7. Generic Error
   if (err instanceof Error) {
-    console.log(err);
+    logger.error(err.message);
     return new AppError(err.message, RESPONSE_STATUSES.SERVER);
   }
 

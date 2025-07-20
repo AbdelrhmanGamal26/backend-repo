@@ -1,7 +1,8 @@
-import { Job } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
+import { Job } from 'bullmq';
 
+// will be kept for reference
 export const logCompletedJob = (job: Job) => {
   const logPath = path.join(__dirname, 'logs', 'completed-jobs.log');
   const logData = `[${new Date().toISOString()}] ${job.name}: ${JSON.stringify(job.data)}\n`;

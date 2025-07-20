@@ -1,5 +1,4 @@
 import { Types } from 'mongoose';
-import { USER_ROLES, ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
 import User from '../db/schemas/user.schema';
@@ -9,6 +8,7 @@ import { UserDocument } from '../@types/userTypes';
 import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { accountRemovalQueue, reminderQueue } from '../utils/bull';
+import { USER_ROLES, ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
 export const getUser = async (userId: string) => {

@@ -6,10 +6,10 @@ import {
   accountVerificationEmailTemplate,
   accountDeletionReminderEmailTemplate,
 } from '../constants/emailTemplates';
+import logger from './winston';
 import sendEmail from './nodemailer';
 import User from '../db/schemas/user.schema';
 import { EMAIL_SENT_STATUS } from '../constants/general';
-import { logCompletedJob, logFailedJob } from './logging';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
 const concurrency = 5;
@@ -37,13 +37,10 @@ export const emailWorker = new Worker(
           verificationUrl: data.verificationUrl,
         }),
       });
-
-      // log the job details to the log file in case of success
-      logCompletedJob(job);
+      logger.info(
+        `Account verification email sent to user: ${data.userData.name}, email: ${data.userData.email}`,
+      );
     } catch (err) {
-      // log the error to the errors log file in case of failure
-      logFailedJob(job, err);
-
       // Let BullMQ retry by throwing the error
       throw err;
     }
@@ -64,6 +61,10 @@ emailWorker.on('completed', async (job: Job) => {
     user.accountActivationEmailSentAt = new Date();
     user.save({ validateBeforeSave: false });
   }
+
+  logger.info(
+    `Account verification email sent to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
@@ -79,7 +80,9 @@ emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
     await currentUser.save({ validateBeforeSave: false });
   }
 
-  // logger.error('Failed to queue email verification job', err);   *this is for later*
+  logger.error(
+    `Failed to send account verification email to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 export const forgotPasswordQueue = new Queue('forgot-queue', {
@@ -100,10 +103,7 @@ export const forgotPasswordWorker = new Worker(
           resetURL: data.resetUrl,
         }),
       });
-
-      logCompletedJob(job);
     } catch (err) {
-      logFailedJob(job, err);
       throw err;
     }
   },
@@ -114,15 +114,9 @@ export const forgotPasswordWorker = new Worker(
 );
 
 forgotPasswordWorker.on('completed', async (job: Job) => {
-  const userId = job.data.userId as Types.ObjectId;
-
-  const currentUser = await User.findById(userId);
-
-  if (currentUser) {
-    console.log('Check your email for the reset password form');
-    // logger.success(`Email sent to user: ${currentUser.name}`);   *this is for later*
-  }
-  // logger.error('Failed to queue email verification job', err);   *this is for later*
+  logger.info(
+    `Password resetting email sent to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
@@ -137,7 +131,9 @@ forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
     currentUser.passwordResetTokenExpires = undefined;
     await currentUser.save({ validateBeforeSave: false });
   }
-  // logger.error('Failed to queue email verification job', err);   *this is for later*
+  logger.error(
+    `Failed to send password resetting email to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 export const reminderQueue = new Queue('reminder-queue', {
@@ -161,10 +157,7 @@ export const reminderWorker = new Worker(
           remainingPeriod: `${remainingPeriod}`,
         }),
       });
-
-      logCompletedJob(job);
     } catch (err) {
-      logFailedJob(job, err);
       throw err;
     }
   },
@@ -184,6 +177,10 @@ reminderWorker.on('completed', async (job: Job) => {
     user.accountInactivationReminderEmailSentAt = new Date();
     await user.save({ validateBeforeSave: false });
   }
+
+  logger.info(
+    `Account deletion reminder email sent to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
@@ -201,6 +198,10 @@ reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
     currentUser.accountInactivationReminderEmailSentAt = undefined;
     await currentUser.save({ validateBeforeSave: false });
   }
+
+  logger.error(
+    `Failed to send account deletion reminder email to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
+  );
 });
 
 export const accountRemovalQueue = new Queue('removal-queue', {
@@ -220,9 +221,7 @@ export const accountRemovalWorker = new Worker(
           name: data.userData.name,
         }),
       });
-      logCompletedJob(job);
     } catch (err) {
-      logFailedJob(job, err);
       throw err;
     }
   },
@@ -237,14 +236,13 @@ accountRemovalWorker.on('completed', async (job) => {
 
   await User.findByIdAndDelete(userId);
 
-  return;
+  logger.info(`User: ${job.data.userData.email} received account deletion email.`);
 });
 
 accountRemovalWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  // const userId = job.data.userId as Types.ObjectId;
-  // logger.warn(`Account deletion job for user ${userId} failed: ${err?.message}`);
+  logger.error(`User: ${job.data.userData.email} did not receive account deletion email.`);
 });
 
 const BULL_JOB_ATTEMPTS = 3;

@@ -3,9 +3,10 @@ dotenv();
 
 import mongoose from 'mongoose';
 import app from './app';
+import logger from './src/utils/winston';
 
 process.on('uncaughtException', (err) => {
-  console.log(err.name, err.message);
+  logger.error(err.message);
   process.exit(1);
 });
 
@@ -24,8 +25,8 @@ const server = app.listen(port, () => {
   console.log(`listening on port ${port}...`);
 });
 
-process.on('unhandledRejection', (err) => {
-  console.log(err);
+process.on('unhandledRejection', (err: Error) => {
+  logger.error(err.message);
   server.close(() => {
     process.exit(1);
   });
