@@ -137,7 +137,9 @@ export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => 
       throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
     }
 
+    deletedUser.refreshToken = [];
     deletedUser.deleteAt = new Date();
+    deletedUser.logoutAt = new Date();
     await deletedUser.save({ validateBeforeSave: false });
 
     const jobDelay =
@@ -177,7 +179,9 @@ export const deleteUser = async (
       throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
     }
 
+    deletedUser.refreshToken = [];
     deletedUser.deleteAt = new Date();
+    deletedUser.logoutAt = new Date();
     await deletedUser.save({ validateBeforeSave: false });
 
     const jobDelay =

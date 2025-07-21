@@ -75,11 +75,10 @@ export const deleteMe = async (req: CustomRequest, res: Response) => {
   const currentToken = getTokenValueFromHeaders(req);
   await userServices.deleteMe(userId, currentToken);
 
-  clearCookieValue(res, 'accessToken');
   clearCookieValue(res, 'refreshToken');
 
   res.status(RESPONSE_STATUSES.NO_CONTENT).json({
-    status: 'Success',
+    message: 'Account deleted',
   });
 };
 
@@ -90,7 +89,7 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
   const currentToken = getTokenValueFromHeaders(req);
   await userServices.deleteUser(userId, role, email, currentToken);
   res.status(RESPONSE_STATUSES.NO_CONTENT).json({
-    status: 'Success',
+    message: 'Account deleted',
   });
 };
 
