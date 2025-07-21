@@ -37,9 +37,6 @@ export const emailWorker = new Worker(
           verificationUrl: data.verificationUrl,
         }),
       });
-      logger.info(
-        `Account verification email sent to user: ${data.userData.name}, email: ${data.userData.email}`,
-      );
     } catch (err) {
       // Let BullMQ retry by throwing the error
       throw err;

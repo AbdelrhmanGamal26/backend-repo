@@ -17,10 +17,10 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
 import { EMAIL_SENT_STATUS, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
+import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
 
 type CreatedUserType = {
   name: string;
@@ -62,6 +62,7 @@ export const createUser = async (data: CreatedUserType) => {
       DURATIONS.TIME_TO_DELETE_AFTER_SIGNUP_WITHOUT_ACTIVATION,
     );
   } catch (err) {
+    logger.error(`Failed to queue email verification job for user: ${createdUser.email}`);
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
@@ -226,6 +227,7 @@ export const forgotPassword = async (email: string): Promise<void> => {
     await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
     await sendForgotPasswordEmail(user, resetUrl);
   } catch (err) {
+    logger.error(`Failed to queue email verification job for user: ${user.email}`);
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
@@ -338,7 +340,7 @@ export const resendVerificationToken = async (email: string): Promise<string | v
     user.accountActivationEmailSentAt = undefined;
     await user.save({ validateBeforeSave: false });
   } catch (err) {
-    // logger.error('Failed to queue email verification job', err);   *this is for later*
+    logger.error(`Failed to queue email verification job for user: ${user.email}`);
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };

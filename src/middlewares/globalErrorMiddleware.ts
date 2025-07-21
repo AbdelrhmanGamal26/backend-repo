@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import AppError from '../utils/appError'; // Make sure AppError class sets isOperational
+import logger from '../utils/winston';
+import AppError from '../utils/appError';
+import { wrapError } from '../utils/wrapError';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { isDevelopment, isProduction } from '../utils/generalUtils';
-import { wrapError } from '../utils/wrapError';
-import logger from '../utils/winston';
 
 // --- DEV/PROD SENDERS (no change needed) ---
 const sendErrorDev = (err: AppError, res: Response) => {

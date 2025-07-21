@@ -6,7 +6,7 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 const redisClient = createClient();
 
 redisClient.on('error', (err) => logger.error(`connection to redis failed: ${err}`));
-redisClient.on('connect', () => logger.info('connected to redis db successfully'));
+redisClient.on('connect', () => console.log('connected to redis db successfully'));
 
 (async () => await redisClient.connect())();
 
