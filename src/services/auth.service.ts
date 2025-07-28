@@ -150,7 +150,10 @@ export const login = async (
 
 export const refreshAccessToken = async (res: Response, refreshToken: string): Promise<string> => {
   if (!refreshToken) {
-    throw new AppError('Refresh token missing', RESPONSE_STATUSES.UNAUTHORIZED);
+    throw new AppError(
+      'You are not logged in. Please login first.',
+      RESPONSE_STATUSES.UNAUTHORIZED,
+    );
   }
 
   // Clear the old cookie immediately

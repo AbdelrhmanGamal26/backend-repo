@@ -24,7 +24,7 @@ if (isDevelopment) {
 }
 
 const limiter = rateLimit({
-  limit: 100,
+  limit: 10000,
   windowMs: DURATIONS.RATE_LIMIT_WINDOW,
   message: 'Too many requests from this IP. Please try again in one hour',
 });

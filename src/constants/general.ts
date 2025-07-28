@@ -8,7 +8,7 @@ export const ACCOUNT_STATES = {
   INACTIVE: 'inactive',
 } as const;
 
-export const CORS_ORIGINS: string[] = ['http://localhost:3000', 'http://localhost:5173'];
+export const CORS_ORIGINS: string[] = ['http://localhost:5173'];
 
 export const EMAIL_VERIFICATION_STATUSES = {
   INVALID: 'invalid',

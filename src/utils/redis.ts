@@ -42,4 +42,22 @@ export const clearLoginAttempts = async (email: string) => {
   await redisClient.del(key);
 };
 
+export const getFromRedis = async (key: string) => {
+  const data = await redisClient.get(key);
+  return data ? JSON.parse(data) : null;
+};
+
+export const saveToRedis = async (key: string, value: any, ttlInSeconds: number = 300) => {
+  await redisClient.set(key, JSON.stringify(value), {
+    expiration: {
+      type: 'EX',
+      value: ttlInSeconds,
+    },
+  });
+};
+
+export const deleteFromRedis = async (key: string) => {
+  await redisClient.del(key);
+};
+
 export default redisClient;
