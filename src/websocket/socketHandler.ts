@@ -8,14 +8,16 @@ export default function setupSocketHandlers(io: Server) {
       socket.join(roomId);
     });
 
-    socket.on('privateRoomChat', ({ roomId, msg }) => {
+    socket.on('privateRoomChat', ({ roomId, msg, senderId }) => {
       console.log(roomId, msg);
 
-      // io.to(roomId).emit('privateRoomChat', msg.content);   // others
+      const messageWithSender = { ...msg, senderId };
+
+      // io.to(roomId).emit('privateRoomChat', msg.content); // others
       // io.in(roomId).emit('privateRoomChat', msg.content);   // all
 
-      socket.to(roomId).emit('privateRoomChat', msg); // others
-      socket.emit('privateRoomChat', msg); // sender
+      socket.to(roomId).emit('privateRoomChat', { roomId, msg: messageWithSender }); // others
+      socket.emit('privateRoomChat', { roomId, msg }); // sender
     });
 
     socket.on('leaveRoom', ({ roomId }) => {

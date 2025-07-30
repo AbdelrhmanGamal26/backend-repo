@@ -12,8 +12,12 @@ export const getAllConversationMessages = async (conversationId: Types.ObjectId)
   return messages;
 };
 
-export const sendConversationMessage = async (conversationId: Types.ObjectId, message: string) => {
-  const sentMessage = await Message.create({ content: message, conversationId });
+export const sendConversationMessage = async (
+  conversationId: Types.ObjectId,
+  message: string,
+  senderId: Types.ObjectId,
+) => {
+  const sentMessage = await Message.create({ content: message, conversationId, senderId });
 
   if (!sentMessage) {
     throw new AppError('Failed to save message', RESPONSE_STATUSES.SERVER);

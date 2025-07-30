@@ -29,9 +29,13 @@ export const getAllConversationMessages = async (req: CustomRequest, res: Respon
 };
 
 export const sendConversationMessage = async (req: CustomRequest, res: Response) => {
-  const { conversationId, message } = req.body;
+  const { conversationId, message, senderId } = req.body;
 
-  const sentMessage = await messageServices.sendConversationMessage(conversationId, message);
+  const sentMessage = await messageServices.sendConversationMessage(
+    conversationId,
+    message,
+    senderId,
+  );
 
   res.status(RESPONSE_STATUSES.CREATED).json({
     data: {
