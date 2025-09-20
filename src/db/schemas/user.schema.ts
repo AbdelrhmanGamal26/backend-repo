@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import DURATIONS from '../../constants/durations';
 import { HydratedDocument, Schema, model } from 'mongoose';
+import DURATIONS from '../../constants/durations';
 import { UserDocument, UserSchemaFields } from '../../@types/userTypes';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS, USER_ROLES } from '../../constants/general';
 
@@ -161,28 +161,38 @@ userSchema.methods.correctPassword = async function (
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-userSchema.methods.changedPasswordAfter = function (JWTTimestamp: number): boolean {
+userSchema.methods.changedPasswordAfter = function (
+  this: HydratedDocument<UserSchemaFields>,
+  JWTTimestamp: number,
+): boolean {
   if (!this.changedPasswordAt) return false; // returning false means NOT changed
-  const changedPasswordTimeInSec = Math.floor((this.changedPasswordAt as Date).getTime() / 1000); // division by 1000 to turn returned time in seconds
+  const changedPasswordTimeInSec = Math.floor((this.changedPasswordAt as Date).getTime() / 1000); // division by 1000 to turn returned time into seconds
   return JWTTimestamp < changedPasswordTimeInSec;
 };
 
-userSchema.methods.createPasswordResetToken = function (): string {
+userSchema.methods.createPasswordResetToken = function (
+  this: HydratedDocument<UserSchemaFields>,
+): string {
   const resetToken = crypto.randomBytes(32).toString('hex');
 
   this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-  this.passwordResetTokenExpires = Date.now() + DURATIONS.PASSWORD_RESET_TOKEN_EXPIRATION_PERIOD;
+  this.passwordResetTokenExpires = new Date(
+    Date.now() + DURATIONS.PASSWORD_RESET_TOKEN_EXPIRATION_PERIOD,
+  );
 
   return resetToken;
 };
 
-userSchema.methods.createEmailVerificationToken = function (expiresIn: number): string {
+userSchema.methods.createEmailVerificationToken = function (
+  this: HydratedDocument<UserSchemaFields>,
+  expiresIn: number,
+): string {
   const verificationToken = crypto.randomBytes(32).toString('hex');
 
   this.verifyEmailToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
 
-  this.verifyEmailTokenExpires = Date.now() + expiresIn;
+  this.verifyEmailTokenExpires = new Date(Date.now() + expiresIn);
 
   return verificationToken;
 };

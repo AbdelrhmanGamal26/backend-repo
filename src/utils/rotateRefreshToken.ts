@@ -1,6 +1,5 @@
 import { Response } from 'express';
 import logger from './winston';
-import User from '../db/schemas/user.schema';
 import clearCookieValue from './clearCookieValue';
 import { UserDocument } from '../@types/userTypes';
 
@@ -9,14 +8,15 @@ const rotateRefreshToken = async (
   oldToken: string,
   newToken: string,
   user: UserDocument,
-): Promise<string[]> => {
+): Promise<string> => {
   let updatedTokens = user.refreshToken || [];
 
   // If oldToken exists, remove it from user's tokens
   if (oldToken) {
-    const tokenExists = await User.findOne({ refreshToken: oldToken }).select('+refreshToken');
+    const tokenExists = updatedTokens.includes(oldToken);
 
     if (!tokenExists) {
+      // Possible token reuse detected
       logger.warn('Attempted refresh token reuse at login!');
 
       // Invalidate all tokens
@@ -24,15 +24,18 @@ const rotateRefreshToken = async (
       await user.save({ validateBeforeSave: false });
 
       clearCookieValue(res, 'refreshToken');
-      return [newToken];
+      updatedTokens = [];
+    } else {
+      // Remove the old token
+      updatedTokens = updatedTokens.filter((token) => token !== oldToken);
     }
-
-    // If token is valid and exists, rotate it out
-    updatedTokens = updatedTokens.filter((token) => token !== oldToken);
-    clearCookieValue(res, 'refreshToken');
   }
 
-  return [...updatedTokens, newToken];
+  // Add the new token and save the user
+  user.refreshToken = [...updatedTokens, newToken];
+  await user.save({ validateBeforeSave: false });
+
+  return newToken;
 };
 
 export default rotateRefreshToken;

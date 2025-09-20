@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 
-export default function setupSocketHandlers(io: Server) {
+const setupSocketHandlers = (io: Server) => {
   io.on('connection', (socket: Socket) => {
     console.log('Client connected:', socket.id);
 
@@ -29,4 +29,6 @@ export default function setupSocketHandlers(io: Server) {
       console.log('Client disconnected:', socket.id);
     });
   });
-}
+};
+
+export default setupSocketHandlers;

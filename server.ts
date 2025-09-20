@@ -15,18 +15,23 @@ process.on('uncaughtException', (err) => {
 });
 
 const db: string = process.env.DATABASE ?? '';
+const port = process.env.PORT || 3000;
 
+// Connect to MongoDB, then start server
 mongoose
   .connect(db)
   .then(() => {
     console.log('connected to mongoDB...');
+    server.listen(port, () => {
+      console.log(`listening on port ${port}...`);
+    });
   })
-  .catch((e) => console.log(e.message));
+  .catch((e) => console.log(`MongoDB connection failed: ${e.message}`));
 
 // Create raw HTTP server from Express app
 const server = http.createServer(app);
 
-// Initialize Socket.IO server
+// Initialize Socket.IO
 const io = new SocketIOServer(server, {
   cors: {
     origin: CORS_ORIGINS,
@@ -37,14 +42,17 @@ const io = new SocketIOServer(server, {
 // Attach websocket event handlers
 setupSocketHandlers(io);
 
-const port = process.env.PORT || 3000;
-server.listen(port, () => {
-  console.log(`listening on port ${port}...`);
-});
-
 process.on('unhandledRejection', (err: Error) => {
   logger.error(err.message);
-  server.close(() => {
+  server.close(async () => {
+    await mongoose.connection.close();
     process.exit(1);
   });
+});
+
+// Graceful shutdown (CTRL+C)
+process.on('SIGINT', async () => {
+  logger.info('Gracefully shutting down...');
+  await mongoose.connection.close();
+  server.close(() => process.exit(0));
 });

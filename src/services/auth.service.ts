@@ -1,5 +1,5 @@
-import { Types } from 'mongoose';
 import { Response } from 'express';
+import { Types } from 'mongoose';
 import {
   sendForgotPasswordEmail,
   sendAccountDeletionEmail,
@@ -121,13 +121,14 @@ export const login = async (
   );
 
   // Handle Token Rotation
-  const newRefreshTokenArray = await rotateRefreshToken(res, jwt, refreshTokenValue, user);
+  const newRefreshToken = await rotateRefreshToken(res, jwt, refreshTokenValue, user);
 
+  // Update login/logout times
   user.loginAt = new Date();
   user.logoutAt = undefined;
-  user.refreshToken = [...newRefreshTokenArray];
   await user.save({ validateBeforeSave: false });
 
+  // Generate access token
   const accessToken = generateToken(
     user._id,
     'JWT_ACCESS_TOKEN_SECRET',
@@ -145,7 +146,7 @@ export const login = async (
     ...restUserData
   } = user.toObject();
 
-  return { user: restUserData, accessToken, refreshToken: refreshTokenValue };
+  return { user: restUserData, accessToken, refreshToken: newRefreshToken };
 };
 
 export const refreshAccessToken = async (res: Response, refreshToken: string): Promise<string> => {

@@ -1,5 +1,5 @@
-import xss from 'xss';
 import { Request, Response, NextFunction } from 'express';
+import xss from 'xss';
 
 const sanitizeInput = (input: any): any => {
   if (typeof input === 'string') return xss(input);
@@ -15,7 +15,7 @@ const sanitizeInput = (input: any): any => {
 export const xssSanitizer = (req: Request, _res: Response, next: NextFunction) => {
   sanitizeInput(req.body);
   sanitizeInput(req.params);
-  sanitizeInput(req.query); // 🔄 mutate in place instead of reassigning
+  sanitizeInput(req.query); // mutate in place instead of reassigning
 
   next();
 };
