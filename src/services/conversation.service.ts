@@ -18,6 +18,13 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
   }
 
+  if (currentUserId.equals(recipientUser._id)) {
+    throw new AppError(
+      'User can not start a conversation with himself',
+      RESPONSE_STATUSES.BAD_REQUEST,
+    );
+  }
+
   const members = [currentUserId.toString(), recipientUser._id.toString()];
   const roomId =
     members[0] < members[1] ? `${members[0]}-${members[1]}` : `${members[1]}-${members[0]}`;
@@ -25,10 +32,13 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
   let conversation = await conversationDao.getConversation(roomId);
 
   if (!conversation) {
-    conversation = await Conversation.create({
+    const created = await Conversation.create({
       roomId,
       members,
     });
+
+    // Populate after creation
+    conversation = await Conversation.findById(created._id).populate('members', 'name email _id');
   }
 
   return conversation;
