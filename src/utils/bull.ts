@@ -1,4 +1,3 @@
-import { Types } from 'mongoose';
 import { Queue, Worker, RedisOptions, Job } from 'bullmq';
 import {
   forgotPasswordEmailTemplate,
@@ -8,7 +7,7 @@ import {
 } from '../constants/emailTemplates';
 import logger from './winston';
 import sendEmail from './nodemailer';
-import User from '../db/schemas/user.schema';
+import * as userDao from '../DAOs/user.dao';
 import { EMAIL_SENT_STATUS } from '../constants/general';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
@@ -49,9 +48,7 @@ export const emailWorker = new Worker(
 );
 
 emailWorker.on('completed', async (job: Job) => {
-  const userId = job.data.userId as Types.ObjectId;
-
-  const user = await User.findById(userId);
+  const user = await userDao.getUserById(job.data.userId);
 
   if (user) {
     user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
@@ -67,9 +64,7 @@ emailWorker.on('completed', async (job: Job) => {
 emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  const userId = job.data.userId as Types.ObjectId;
-
-  const currentUser = await User.findById(userId);
+  const currentUser = await userDao.getUserById(job.data.userId);
   if (currentUser && currentUser.accountActivationEmailSentStatus !== EMAIL_SENT_STATUS.SUCCESS) {
     currentUser.verifyEmailToken = undefined;
     currentUser.verifyEmailTokenExpires = undefined;
@@ -119,9 +114,7 @@ forgotPasswordWorker.on('completed', async (job: Job) => {
 forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  const userId = job.data.userId as Types.ObjectId;
-
-  const currentUser = await User.findById(userId);
+  const currentUser = await userDao.getUserById(job.data.userId);
 
   if (currentUser) {
     currentUser.passwordResetToken = undefined;
@@ -165,9 +158,7 @@ export const reminderWorker = new Worker(
 );
 
 reminderWorker.on('completed', async (job: Job) => {
-  const userId = job.data.userId as Types.ObjectId;
-
-  const user = await User.findById(userId);
+  const user = await userDao.getUserById(job.data.userId);
 
   if (user) {
     user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
@@ -183,9 +174,7 @@ reminderWorker.on('completed', async (job: Job) => {
 reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  const userId = job.data.userId as Types.ObjectId;
-
-  const currentUser = await User.findById(userId);
+  const currentUser = await userDao.getUserById(job.data.userId);
 
   if (
     currentUser &&
@@ -229,9 +218,7 @@ export const accountRemovalWorker = new Worker(
 );
 
 accountRemovalWorker.on('completed', async (job) => {
-  const userId = job.data.userId as Types.ObjectId;
-
-  await User.findByIdAndDelete(userId);
+  await userDao.deleteUserById(job.data.userId);
 
   logger.info(`User: ${job.data.userData.email} received account deletion email.`);
 });

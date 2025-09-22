@@ -8,10 +8,11 @@ import {
 } from '../utils/bullmqJobs';
 import logger from '../utils/winston';
 import AppError from '../utils/appError';
-import User from '../db/schemas/user.schema';
+import * as userDao from '../DAOs/user.dao';
 import DURATIONS from '../constants/durations';
 import { hashToken } from '../utils/generalUtils';
 import { userIsVerified } from '../utils/userUtils';
+import { CreatedUserType } from '../@types/userTypes';
 import clearCookieValue from '../utils/clearCookieValue';
 import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
@@ -22,15 +23,9 @@ import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGr
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
 
-type CreatedUserType = {
-  name: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-};
-
+// ================================= Start of create user =================================== //
 export const createUser = async (data: CreatedUserType) => {
-  const createdUser = await User.create(data);
+  const createdUser = await userDao.createUser(data);
 
   if (!createdUser) {
     throw new AppError('Failed to create user', RESPONSE_STATUSES.SERVER);
@@ -66,7 +61,9 @@ export const createUser = async (data: CreatedUserType) => {
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
+// ================================= End of create user =================================== //
 
+// ================================= Start of login user =================================== //
 type UserLoginReturnDataType = {
   _id: Types.ObjectId;
   __v: number;
@@ -82,9 +79,9 @@ export const login = async (
   res: Response,
   jwt: string,
 ): Promise<{ user: UserLoginReturnDataType; accessToken: string; refreshToken: string }> => {
-  const user = await User.findOne({
-    email: userData.email,
-  }).select('+password +isVerified +deleteAt +accountState +refreshToken');
+  const user = await userDao
+    .getUser({ email: userData.email })
+    .select('+password +isVerified +deleteAt +accountState +refreshToken');
 
   // Store the login attempt
   await checkLoginAttempts(userData.email);
@@ -148,7 +145,9 @@ export const login = async (
 
   return { user: restUserData, accessToken, refreshToken: newRefreshToken };
 };
+// ================================= End of login user =================================== //
 
+// ================================= Start of refresh access token =================================== //
 export const refreshAccessToken = async (res: Response, refreshToken: string): Promise<string> => {
   if (!refreshToken) {
     throw new AppError(
@@ -173,7 +172,7 @@ export const refreshAccessToken = async (res: Response, refreshToken: string): P
   }
 
   // Find user by refresh token
-  const user = await User.findOne({ refreshToken }).select('+refreshToken');
+  const user = await userDao.getUser({ refreshToken }).select('+refreshToken');
   const newRefreshToken = generateToken(
     payload.data,
     'JWT_REFRESH_TOKEN_SECRET',
@@ -183,7 +182,7 @@ export const refreshAccessToken = async (res: Response, refreshToken: string): P
   if (!user) {
     // Token reuse detected
     logger.warn('Refresh token reuse detected!');
-    const hackedUser = await User.findById(payload.data);
+    const hackedUser = await userDao.getUserById(payload.data);
     if (hackedUser) {
       hackedUser.refreshToken = [];
       await hackedUser.save();
@@ -211,9 +210,11 @@ export const refreshAccessToken = async (res: Response, refreshToken: string): P
 
   return newAccessToken;
 };
+// ================================= End of refresh access token =================================== //
 
+// ================================= Start of forgot password =================================== //
 export const forgotPassword = async (email: string): Promise<void> => {
-  const user = await User.findOne({ email }).select('+isVerified');
+  const user = await userDao.getUser({ email }).select('+isVerified');
 
   if (!user) {
     throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
@@ -235,14 +236,18 @@ export const forgotPassword = async (email: string): Promise<void> => {
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
+// ================================= End of forgot password =================================== //
 
+// ================================= Start of verify reset token =================================== //
 export const verifyResetToken = async (resetToken: string) => {
   const hashedToken = hashToken(resetToken);
 
-  const user = await User.findOne({
-    passwordResetToken: hashedToken,
-    passwordResetTokenExpires: { $gt: Date.now() },
-  }).select('+isVerified');
+  const user = await userDao
+    .getUser({
+      passwordResetToken: hashedToken,
+      passwordResetTokenExpires: { $gt: Date.now() },
+    })
+    .select('+isVerified');
 
   if (!user) {
     throw new AppError('Invalid token or token expired', RESPONSE_STATUSES.BAD_REQUEST);
@@ -253,14 +258,18 @@ export const verifyResetToken = async (resetToken: string) => {
 
   return;
 };
+// ================================= End of verify reset token =================================== //
 
+// ================================= Start of reset password =================================== //
 export const resetPassword = async (resetToken: string, password: string): Promise<void> => {
   const hashedToken = hashToken(resetToken);
 
-  const user = await User.findOne({
-    passwordResetToken: hashedToken,
-    passwordResetTokenExpires: { $gt: Date.now() },
-  }).select('+isVerified');
+  const user = await userDao
+    .getUser({
+      passwordResetToken: hashedToken,
+      passwordResetTokenExpires: { $gt: Date.now() },
+    })
+    .select('+isVerified');
 
   if (!user) {
     throw new AppError('Invalid token or token expired', RESPONSE_STATUSES.BAD_REQUEST);
@@ -277,11 +286,13 @@ export const resetPassword = async (resetToken: string, password: string): Promi
   // Remove the password reset job
   await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
 };
+// ================================= End of reset password =================================== //
 
+// ================================= Start of verify email =================================== //
 export const verifyEmail = async (verificationToken: string): Promise<string> => {
   const hashedToken = hashToken(verificationToken);
 
-  const user = await User.findOne({
+  const user = await userDao.getUser({
     verifyEmailToken: hashedToken,
     verifyEmailTokenExpires: { $gt: Date.now() },
   });
@@ -306,9 +317,11 @@ export const verifyEmail = async (verificationToken: string): Promise<string> =>
 
   return EMAIL_VERIFICATION_STATUSES.VERIFIED;
 };
+// ================================= End of verify email =================================== //
 
+// ================================= Start of resend verification token =================================== //
 export const resendVerificationToken = async (email: string): Promise<string | void> => {
-  const user = await User.findOne({ email }).select('+isVerified');
+  const user = await userDao.getUser({ email }).select('+isVerified');
 
   if (!user) {
     throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
@@ -348,3 +361,4 @@ export const resendVerificationToken = async (email: string): Promise<string | v
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };
+// ================================= End of resend verification token =================================== //

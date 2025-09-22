@@ -1,8 +1,9 @@
 import { NextFunction, Response } from 'express';
+import { Types } from 'mongoose';
 import AppError from '../utils/appError';
 import { verifyToken } from '../utils/jwt';
+import * as userDao from '../DAOs/user.dao';
 import catchAsync from '../utils/catchAsync';
-import User from '../db/schemas/user.schema';
 import { CustomRequest } from '../@types/generalTypes';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import getTokenValueFromCookies from '../utils/getTokenValueFromCookies';
@@ -32,7 +33,9 @@ const authenticatedMiddleware = catchAsync(
       return next(new AppError('Invalid token', RESPONSE_STATUSES.UNAUTHORIZED));
     }
 
-    const currentUser = await User.findById(decoded.data);
+    const userId = new Types.ObjectId(decoded.data);
+
+    const currentUser = await userDao.getUserById(userId);
 
     if (!currentUser) {
       return next(

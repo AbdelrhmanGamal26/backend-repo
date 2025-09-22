@@ -1,18 +1,16 @@
 import { Types } from 'mongoose';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
-import User from '../db/schemas/user.schema';
 import DURATIONS from '../constants/durations';
 import { filterObj } from '../utils/generalUtils';
-import { UserDocument } from '../@types/userTypes';
 import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { accountRemovalQueue, reminderQueue } from '../utils/bull';
 import { USER_ROLES, ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
-export const getUser = async (userId: string) => {
-  return userDao.getUser(userId);
+export const getUser = async (userId: Types.ObjectId) => {
+  return userDao.getUserById(userId);
 };
 
 export const getAllUsers = async (params: { [key: string]: any }) => {
@@ -53,14 +51,10 @@ export const updateUserProfile = async (
   // To safely hash the password:
   // Avoid using findOneAndUpdate for password changes.
   // Instead, load the user, update the password, and call .save()
-  const updatedUser: UserDocument | null = await User.findOneAndUpdate(
-    { _id: userId },
-    filteredUserData,
-    {
-      new: true, // this option is used to return the newly updated document
-      runValidators: true, // this option is for running validation on the newly updated document
-    },
-  );
+  const updatedUser = await userDao.updateUserData({ _id: userId }, filteredUserData, {
+    new: true, // this option is used to return the newly updated document
+    runValidators: true, // this option is for running validation on the newly updated document
+  });
 
   if (!updatedUser) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
@@ -85,7 +79,7 @@ export const updateUserPassword = async (
     );
   }
 
-  const user = await User.findById(userId).select('+password');
+  const user = await userDao.getUserById(userId).select('+password');
 
   if (!user) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
@@ -126,7 +120,7 @@ export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => 
   const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data === userId.toString()) {
-    const deletedUser = await User.findOneAndUpdate(
+    const deletedUser = await userDao.updateUserData(
       { _id: userId },
       {
         accountState: ACCOUNT_STATES.INACTIVE,
@@ -170,7 +164,7 @@ export const deleteUser = async (
   const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data === userId.toString() && role === USER_ROLES.ADMIN) {
-    const deletedUser = await User.findOneAndUpdate(
+    const deletedUser = await userDao.updateUserData(
       { email },
       { accountState: ACCOUNT_STATES.INACTIVE },
     );
@@ -207,7 +201,7 @@ export const deleteUser = async (
 };
 
 export const logout = async (userId: Types.ObjectId) => {
-  const currentUser = await User.findById(userId).select('+refreshToken');
+  const currentUser = await userDao.getUserById(userId).select('+refreshToken');
 
   if (!currentUser) {
     throw new AppError('No user found for that id', RESPONSE_STATUSES.NOT_FOUND);

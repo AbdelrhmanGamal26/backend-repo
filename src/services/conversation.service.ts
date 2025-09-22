@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import AppError from '../utils/appError';
-import User from '../db/schemas/user.schema';
+import * as userDao from '../DAOs/user.dao';
 import * as conversationDao from '../DAOs/conversation.dao';
 import Conversation from '../db/schemas/conversation.schema';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
@@ -12,7 +12,7 @@ export const getAllUserConversations = async (userId: Types.ObjectId) => {
 };
 
 export const startNewConversation = async (currentUserId: Types.ObjectId, email: string) => {
-  const recipientUser = await User.findOne({ email });
+  const recipientUser = await userDao.getUser({ email });
 
   if (!recipientUser) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);

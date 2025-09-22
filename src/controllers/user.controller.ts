@@ -11,7 +11,7 @@ import getTokenValueFromHeaders from '../utils/getTokenValueFromHeaders';
 
 export const getUser = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id as Types.ObjectId;
-  const user = await userServices.getUser(userId.toString());
+  const user = await userServices.getUser(userId);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
       user,
@@ -52,12 +52,13 @@ export const updateUserPassword = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id as Types.ObjectId;
   const { oldPassword, newPassword, confirmNewPassword } = req.body;
   const currentToken = getTokenValueFromHeaders(req);
+
   const { accessToken, refreshToken } = await userServices.updateUserPassword(
     userId,
     oldPassword,
     newPassword,
-    currentToken,
     confirmNewPassword,
+    currentToken,
   );
 
   setValueToCookies(res, 'refreshToken', refreshToken, DURATIONS.REFRESH_TOKEN_MAX_AGE);

@@ -1,13 +1,13 @@
+import {
+  emailQueue,
+  reminderQueue,
+  getBullJobSettings,
+  accountRemovalQueue,
+  forgotPasswordQueue,
+} from './bull';
 import DURATIONS from '../constants/durations';
 import { UserDocument } from '../@types/userTypes';
 import { BULL_ACCOUNT_JOB_NAME } from '../constants/general';
-import {
-  accountRemovalQueue,
-  emailQueue,
-  forgotPasswordQueue,
-  getBullJobSettings,
-  reminderQueue,
-} from './bull';
 
 export const sendAccountActivationEmail = async (user: UserDocument, verificationUrl: string) =>
   await emailQueue.add(

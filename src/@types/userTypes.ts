@@ -34,3 +34,10 @@ export interface UserInstanceMethods {
 }
 
 export type UserDocument = HydratedDocument<UserSchemaFields, UserInstanceMethods>;
+
+export type CreatedUserType = {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
