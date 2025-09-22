@@ -10,7 +10,7 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 import getTokenValueFromHeaders from '../utils/getTokenValueFromHeaders';
 
 export const getUser = async (req: CustomRequest, res: Response) => {
-  const userId = req.user!._id as Types.ObjectId;
+  const userId = req.user!._id;
   const user = await userServices.getUser(userId);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
@@ -38,7 +38,7 @@ export const getAllActiveUsers = async (req: CustomRequest, res: Response) => {
 };
 
 export const updateUserProfile = async (req: CustomRequest, res: Response) => {
-  const userId = req.user!._id as Types.ObjectId;
+  const userId = req.user!._id;
   const currentToken = getTokenValueFromHeaders(req);
   const updatedUser = await userServices.updateUserProfile(userId, req.body, currentToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
@@ -49,7 +49,7 @@ export const updateUserProfile = async (req: CustomRequest, res: Response) => {
 };
 
 export const updateUserPassword = async (req: CustomRequest, res: Response) => {
-  const userId = req.user!._id as Types.ObjectId;
+  const userId = req.user!._id;
   const { oldPassword, newPassword, confirmNewPassword } = req.body;
   const currentToken = getTokenValueFromHeaders(req);
 
@@ -84,7 +84,7 @@ export const deleteMe = async (req: CustomRequest, res: Response) => {
 };
 
 export const deleteUser = async (req: CustomRequest, res: Response) => {
-  const userId = req.user!._id as Types.ObjectId;
+  const userId = req.user!._id;
   const role = req.user!.role;
   const { email } = req.body;
   const currentToken = getTokenValueFromHeaders(req);

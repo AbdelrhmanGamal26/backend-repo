@@ -9,18 +9,20 @@ import { accountRemovalQueue, reminderQueue } from '../utils/bull';
 import { USER_ROLES, ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
-export const getUser = async (userId: Types.ObjectId) => {
-  return userDao.getUserById(userId);
-};
+// ================================= Start of get user =================================== //
+export const getUser = async (userId: Types.ObjectId) => userDao.getUserById(userId);
+// ================================= End of get user =================================== //
 
-export const getAllUsers = async (params: { [key: string]: any }) => {
-  return userDao.getAllUsers(params);
-};
+// ================================= Start of get all users =================================== //
+export const getAllUsers = async (params: { [key: string]: any }) => userDao.getAllUsers(params);
+// ================================= End of get all users =================================== //
 
-export const getAllActiveUsers = async (params: { [key: string]: any }) => {
-  return userDao.getAllActiveUsers(params);
-};
+// ================================= Start of get all active users =================================== //
+export const getAllActiveUsers = async (params: { [key: string]: any }) =>
+  userDao.getAllActiveUsers(params);
+// ================================= End of get all active users =================================== //
 
+// ================================= Start of update user profile =================================== //
 export const updateUserProfile = async (
   userId: Types.ObjectId,
   userData: { [key: string]: any },
@@ -62,7 +64,9 @@ export const updateUserProfile = async (
 
   return updatedUser;
 };
+// ================================= End of update user profile =================================== //
 
+// ================================= Start of update user password =================================== //
 export const updateUserPassword = async (
   userId: Types.ObjectId,
   oldPassword: string,
@@ -115,7 +119,9 @@ export const updateUserPassword = async (
 
   return { accessToken, refreshToken };
 };
+// ================================= End of update user password =================================== //
 
+// ================================= Start of delete me =================================== //
 export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => {
   const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
 
@@ -154,7 +160,9 @@ export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => 
     throw new AppError('You are not allowed to delete other users', RESPONSE_STATUSES.UNAUTHORIZED);
   }
 };
+// ================================= End of delete me =================================== //
 
+// ================================= Start of delete user =================================== //
 export const deleteUser = async (
   userId: Types.ObjectId,
   role: string,
@@ -199,7 +207,9 @@ export const deleteUser = async (
     );
   }
 };
+// ================================= End of delete user =================================== //
 
+// ================================= Start of logout =================================== //
 export const logout = async (userId: Types.ObjectId) => {
   const currentUser = await userDao.getUserById(userId).select('+refreshToken');
 
@@ -226,3 +236,4 @@ export const logout = async (userId: Types.ObjectId) => {
 
   return;
 };
+// ================================= End of logout =================================== //

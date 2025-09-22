@@ -14,7 +14,9 @@ export const getAllConversationMessages = async (req: CustomRequest, res: Respon
     typeof conversationIdStr !== 'string' ||
     !Types.ObjectId.isValid(conversationIdStr)
   ) {
-    return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({ error: 'Invalid conversationId' });
+    return res
+      .status(RESPONSE_STATUSES.BAD_REQUEST)
+      .json({ error: 'This conversation does not exist' });
   }
 
   const conversationId = new Types.ObjectId(conversationIdStr);

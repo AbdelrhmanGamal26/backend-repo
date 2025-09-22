@@ -2,20 +2,14 @@ import { Types } from 'mongoose';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
 import * as conversationDao from '../DAOs/conversation.dao';
-import Conversation from '../db/schemas/conversation.schema';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 
-export const getAllUserConversations = async (userId: Types.ObjectId) => {
-  const conversations = await conversationDao.getAllUserConversations(userId);
-
-  return conversations;
-};
-
+// ================================= Start of start conversation =================================== //
 export const startNewConversation = async (currentUserId: Types.ObjectId, email: string) => {
   const recipientUser = await userDao.getUser({ email });
 
   if (!recipientUser) {
-    throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
+    throw new AppError('No user found with that Email', RESPONSE_STATUSES.NOT_FOUND);
   }
 
   if (currentUserId.equals(recipientUser._id)) {
@@ -29,21 +23,32 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
   const roomId =
     members[0] < members[1] ? `${members[0]}-${members[1]}` : `${members[1]}-${members[0]}`;
 
-  let conversation = await conversationDao.getConversation(roomId);
+  let conversation = await conversationDao.getConversation({ roomId });
 
   if (!conversation) {
-    const created = await Conversation.create({
+    const created = await conversationDao.createConversation({
       roomId,
       members,
     });
 
     // Populate after creation
-    conversation = await Conversation.findById(created._id).populate('members', 'name email _id');
+    conversation = await conversationDao.getConversation({ _id: created._id });
   }
 
   return conversation;
 };
+// ================================= End of start conversation =================================== //
 
+// ================================= Start of get user conversations =================================== //
+export const getAllUserConversations = async (userId: Types.ObjectId) => {
+  const conversations = await conversationDao.getAllUserConversations(userId);
+
+  return conversations;
+};
+// ================================= End of get user conversations =================================== //
+
+// ================================= Start of delete conversation =================================== //
 export const deleteConversation = async () => {
   console.log('conversation deleted');
 };
+// ================================= End of delete conversation =================================== //
