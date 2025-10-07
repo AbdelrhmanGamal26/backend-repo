@@ -14,11 +14,12 @@ import { hashToken } from '../utils/generalUtils';
 import { userIsVerified } from '../utils/userUtils';
 import { CreatedUserType } from '../@types/userTypes';
 import clearCookieValue from '../utils/clearCookieValue';
+import { ServiceResponse } from '../@types/generalTypes';
+import { EMAIL_SENT_STATUS } from '../constants/general';
 import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { EMAIL_SENT_STATUS, EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
@@ -289,38 +290,62 @@ export const resetPassword = async (resetToken: string, password: string): Promi
 // ================================= End of reset password =================================== //
 
 // ================================= Start of verify email =================================== //
-export const verifyEmail = async (verificationToken: string): Promise<string> => {
+export const verifyEmail = async (verificationToken: string): Promise<ServiceResponse> => {
   const hashedToken = hashToken(verificationToken);
 
-  const user = await userDao.getUser({
-    verifyEmailToken: hashedToken,
-    verifyEmailTokenExpires: { $gt: Date.now() },
-  });
+  const user = await userDao.getUser({ verifyEmailToken: hashedToken });
 
   if (!user) {
-    return EMAIL_VERIFICATION_STATUSES.INVALID_OR_EXPIRED;
+    return {
+      status: RESPONSE_STATUSES.BAD_REQUEST,
+      message: 'Invalid token',
+    };
+  }
+
+  if (user.verifyEmailTokenExpires && user.verifyEmailTokenExpires.getTime() < Date.now()) {
+    return {
+      status: RESPONSE_STATUSES.BAD_REQUEST,
+      message: 'Invalid token or token has expired',
+    };
   }
 
   if (user.isVerified) {
-    return EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED;
+    return {
+      status: RESPONSE_STATUSES.SUCCESS,
+      message: 'Email is already verified',
+    };
   }
 
-  user.isVerified = true;
-  user.verifiedAt = new Date();
-  user.verifyEmailToken = undefined;
-  user.verifyEmailTokenExpires = undefined;
-  await user.save();
+  // success block
+  try {
+    // Mark as verified
+    user.isVerified = true;
+    user.verifiedAt = new Date();
+    user.verifyEmailToken = undefined;
+    user.verifyEmailTokenExpires = undefined;
+    await user.save();
 
-  await emailQueue.remove(`email-${user._id}`);
-  await reminderQueue.remove(`reminder-${user._id}`);
-  await accountRemovalQueue.remove(`removal-${user._id}`);
+    // Remove pending jobs
+    await emailQueue.remove(`email-${user._id}`);
+    await reminderQueue.remove(`reminder-${user._id}`);
+    await accountRemovalQueue.remove(`removal-${user._id}`);
 
-  return EMAIL_VERIFICATION_STATUSES.VERIFIED;
+    return {
+      status: RESPONSE_STATUSES.SUCCESS,
+      message: 'Email verified successfully',
+    };
+  } catch (error) {
+    logger.error('Error verifying email:', error);
+    return {
+      status: RESPONSE_STATUSES.SERVER,
+      message: 'An unexpected error occurred during email verification',
+    };
+  }
 };
 // ================================= End of verify email =================================== //
 
 // ================================= Start of resend verification token =================================== //
-export const resendVerificationToken = async (email: string): Promise<string | void> => {
+export const resendVerificationToken = async (email: string): Promise<ServiceResponse> => {
   const user = await userDao.getUser({ email }).select('+isVerified');
 
   if (!user) {
@@ -328,7 +353,10 @@ export const resendVerificationToken = async (email: string): Promise<string | v
   }
 
   if (user.isVerified) {
-    return EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED;
+    return {
+      status: RESPONSE_STATUSES.SUCCESS,
+      message: 'Your account is already verified',
+    };
   }
 
   // Optional: rate-limit resend
@@ -340,24 +368,29 @@ export const resendVerificationToken = async (email: string): Promise<string | v
     throw new AppError('Please wait before requesting again', RESPONSE_STATUSES.TOO_MANY_REQUESTS);
   }
 
-  const verificationToken = user.createEmailVerificationToken(
-    DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
-  );
-
-  user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-  await user.save({ validateBeforeSave: false });
-
-  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
-
   try {
+    const verificationToken = user.createEmailVerificationToken(
+      DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
+    );
+
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
+
+    user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+    await user.save({ validateBeforeSave: false });
+
     await emailQueue.remove(`email-${user._id}`);
     await sendAccountActivationEmail(user, verificationUrl);
 
-    user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-    user.accountActivationEmailSentAt = undefined;
+    user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
+    user.accountActivationEmailSentAt = new Date();
     await user.save({ validateBeforeSave: false });
+
+    return {
+      status: RESPONSE_STATUSES.SUCCESS,
+      message: 'Please check your email inbox for the activation email',
+    };
   } catch (err) {
-    logger.error(`Failed to queue email verification job for user: ${user.email}`);
+    logger.error(`Failed to queue email verification job for user: ${user.email}`, err);
     throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
   }
 };

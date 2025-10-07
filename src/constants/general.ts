@@ -10,13 +10,6 @@ export const ACCOUNT_STATES = {
 
 export const CORS_ORIGINS: string[] = ['http://localhost:5173'];
 
-export const EMAIL_VERIFICATION_STATUSES = {
-  INVALID: 'invalid',
-  VERIFIED: 'verified',
-  ALREADY_VERIFIED: 'already_verified',
-  INVALID_OR_EXPIRED: 'invalid_or_expired',
-} as const;
-
 export const BULL_ACCOUNT_JOB_NAME = {
   SEND_FORGOT: 'send-forgot',
   SEND_REMOVAL: 'send-removal',

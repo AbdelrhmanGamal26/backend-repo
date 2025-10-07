@@ -1,10 +1,10 @@
 import { Response } from 'express';
 import DURATIONS from '../constants/durations';
+import { getQueryParam } from '../utils/generalUtils';
 import { CustomRequest } from '../@types/generalTypes';
 import * as authServices from '../services/auth.service';
 import setValueToCookies from '../utils/setValueToCookies';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { EMAIL_VERIFICATION_STATUSES } from '../constants/general';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
   await authServices.createUser(req.body);
@@ -27,7 +27,11 @@ export const loginUser = async (req: CustomRequest, res: Response) => {
 
 export const refreshAccessToken = async (req: CustomRequest, res: Response) => {
   const newAccessToken = await authServices.refreshAccessToken(res, req.cookies?.refreshToken);
-  res.status(RESPONSE_STATUSES.SUCCESS).json({ data: { accessToken: newAccessToken } });
+  res.status(RESPONSE_STATUSES.SUCCESS).json({
+    data: {
+      accessToken: newAccessToken,
+    },
+  });
 };
 
 export const forgotPassword = async (req: CustomRequest, res: Response) => {
@@ -38,9 +42,8 @@ export const forgotPassword = async (req: CustomRequest, res: Response) => {
 };
 
 export const verifyResetToken = async (req: CustomRequest, res: Response) => {
-  const resetToken = Array.isArray(req.query.resetToken)
-    ? req.query.resetToken[0]
-    : req.query.resetToken;
+  const resetToken = getQueryParam(req.query.resetToken);
+
   if (typeof resetToken !== 'string') {
     return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
       message: 'Invalid or missing reset token',
@@ -53,9 +56,8 @@ export const verifyResetToken = async (req: CustomRequest, res: Response) => {
 };
 
 export const resetPassword = async (req: CustomRequest, res: Response) => {
-  const resetToken = Array.isArray(req.query.resetToken)
-    ? req.query.resetToken[0]
-    : req.query.resetToken;
+  const resetToken = getQueryParam(req.query.resetToken);
+
   if (typeof resetToken !== 'string') {
     return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
       message: 'Invalid or missing reset token',
@@ -68,9 +70,7 @@ export const resetPassword = async (req: CustomRequest, res: Response) => {
 };
 
 export const verifyEmail = async (req: CustomRequest, res: Response) => {
-  const token = Array.isArray(req.query.verificationToken)
-    ? req.query.verificationToken[0]
-    : req.query.verificationToken;
+  const token = getQueryParam(req.query.verificationToken);
 
   if (typeof token !== 'string') {
     return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
@@ -78,39 +78,17 @@ export const verifyEmail = async (req: CustomRequest, res: Response) => {
     });
   }
 
-  const verificationStatus = await authServices.verifyEmail(token);
+  const { status, message } = await authServices.verifyEmail(token);
 
-  switch (verificationStatus) {
-    case EMAIL_VERIFICATION_STATUSES.INVALID:
-    case EMAIL_VERIFICATION_STATUSES.INVALID_OR_EXPIRED:
-      return res.status(RESPONSE_STATUSES.BAD_REQUEST).json({
-        message: 'Invalid token or token has expired',
-      });
-    case EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED:
-    case EMAIL_VERIFICATION_STATUSES.VERIFIED:
-      return res.status(RESPONSE_STATUSES.SUCCESS).json({
-        message:
-          verificationStatus === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED
-            ? 'Email already verified'
-            : 'Email verified successfully',
-      });
-    default:
-      return res.status(RESPONSE_STATUSES.SERVER).json({
-        message: 'An unexpected error occurred',
-      });
-  }
+  res.status(status).json({
+    message,
+  });
 };
 
 export const resendVerificationToken = async (req: CustomRequest, res: Response) => {
-  const status = await authServices.resendVerificationToken(req.body.email);
+  const { status, message } = await authServices.resendVerificationToken(req.body.email);
 
-  if (status === EMAIL_VERIFICATION_STATUSES.ALREADY_VERIFIED) {
-    return res.status(RESPONSE_STATUSES.SUCCESS).json({
-      message: 'Your account is already verified',
-    });
-  }
-
-  res.status(RESPONSE_STATUSES.SUCCESS).json({
-    message: 'Please check your email inbox for the activation email',
+  res.status(status).json({
+    message,
   });
 };

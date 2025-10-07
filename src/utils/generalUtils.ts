@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { ParsedQs } from 'qs';
 
 export const isDevelopment: boolean = process.env.NODE_ENV?.trim() === 'development';
 
@@ -26,3 +27,6 @@ export const filterObj = (
 };
 
 export const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
+
+export const getQueryParam = (param: string | ParsedQs | (string | ParsedQs)[] | undefined) =>
+  Array.isArray(param) ? param[0] : param;

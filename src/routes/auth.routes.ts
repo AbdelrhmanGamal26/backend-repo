@@ -46,7 +46,7 @@ authRouter.patch(
   catchAsync(authController.resetPassword),
 );
 
-authRouter.post(
+authRouter.get(
   '/verify-email',
   queryParamsValidationMiddleware(verificationTokenSchema, 'Invalid verification token'),
   catchAsync(authController.verifyEmail),
