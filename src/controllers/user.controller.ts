@@ -39,8 +39,8 @@ export const getAllActiveUsers = async (req: CustomRequest, res: Response) => {
 
 export const updateUserProfile = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id;
-  const currentToken = getTokenValueFromHeaders(req);
-  const updatedUser = await userServices.updateUserProfile(userId, req.body, currentToken);
+  const currentAccessToken = getTokenValueFromHeaders(req);
+  const updatedUser = await userServices.updateUserProfile(userId, req.body, currentAccessToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
       user: updatedUser,
@@ -51,14 +51,14 @@ export const updateUserProfile = async (req: CustomRequest, res: Response) => {
 export const updateUserPassword = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id;
   const { oldPassword, newPassword, confirmNewPassword } = req.body;
-  const currentToken = getTokenValueFromHeaders(req);
+  const currentAccessToken = getTokenValueFromHeaders(req);
 
   const { accessToken, refreshToken } = await userServices.updateUserPassword(
     userId,
     oldPassword,
     newPassword,
     confirmNewPassword,
-    currentToken,
+    currentAccessToken,
   );
 
   setValueToCookies(res, 'refreshToken', refreshToken, DURATIONS.REFRESH_TOKEN_MAX_AGE);
@@ -73,24 +73,22 @@ export const updateUserPassword = async (req: CustomRequest, res: Response) => {
 
 export const deleteMe = async (req: CustomRequest, res: Response) => {
   const userId = req.user?._id as Types.ObjectId;
-  const currentToken = getTokenValueFromHeaders(req);
-  await userServices.deleteMe(userId, currentToken);
+  const currentAccessToken = getTokenValueFromHeaders(req);
+  await userServices.deleteMe(userId, currentAccessToken);
 
   clearCookieValue(res, 'refreshToken');
 
-  res.status(RESPONSE_STATUSES.NO_CONTENT).json({
+  res.status(RESPONSE_STATUSES.SUCCESS).json({
     message: 'Account deleted',
+    data: null,
   });
 };
 
 export const deleteUser = async (req: CustomRequest, res: Response) => {
-  const userId = req.user!._id;
-  const role = req.user!.role;
-  const { email } = req.body;
-  const currentToken = getTokenValueFromHeaders(req);
-  await userServices.deleteUser(userId, role, email, currentToken);
-  res.status(RESPONSE_STATUSES.NO_CONTENT).json({
+  await userServices.deleteUser(req.body.email);
+  res.status(RESPONSE_STATUSES.SUCCESS).json({
     message: 'Account deleted',
+    data: null,
   });
 };
 

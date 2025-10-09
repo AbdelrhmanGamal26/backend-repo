@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import logger from '../utils/winston';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
 import DURATIONS from '../constants/durations';
@@ -6,7 +7,7 @@ import { filterObj } from '../utils/generalUtils';
 import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { accountRemovalQueue, reminderQueue } from '../utils/bull';
-import { USER_ROLES, ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
+import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
 // ================================= Start of get user =================================== //
@@ -26,9 +27,9 @@ export const getAllActiveUsers = async (params: { [key: string]: any }) =>
 export const updateUserProfile = async (
   userId: Types.ObjectId,
   userData: { [key: string]: any },
-  currentToken: string,
+  currentAccessToken: string,
 ) => {
-  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
+  const decoded = verifyToken(currentAccessToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data !== userId.toString()) {
     throw new AppError(
@@ -62,6 +63,10 @@ export const updateUserProfile = async (
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
   }
 
+  if (updatedUser.accountState === ACCOUNT_STATES.INACTIVE) {
+    throw new AppError('This account is inactive', RESPONSE_STATUSES.UNAUTHORIZED);
+  }
+
   return updatedUser;
 };
 // ================================= End of update user profile =================================== //
@@ -72,9 +77,9 @@ export const updateUserPassword = async (
   oldPassword: string,
   newPassword: string,
   confirmNewPassword: string,
-  currentToken: string,
+  currentAccessToken: string,
 ) => {
-  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
+  const decoded = verifyToken(currentAccessToken, 'JWT_ACCESS_TOKEN_SECRET');
 
   if (decoded.data !== userId.toString()) {
     throw new AppError(
@@ -87,6 +92,10 @@ export const updateUserPassword = async (
 
   if (!user) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
+  }
+
+  if (user.accountState === ACCOUNT_STATES.INACTIVE) {
+    throw new AppError('This account is inactive', RESPONSE_STATUSES.UNAUTHORIZED);
   }
 
   const isPasswordCorrect = await user.correctPassword(oldPassword);
@@ -102,10 +111,16 @@ export const updateUserPassword = async (
     );
   }
 
+  // update password
   user.password = newPassword;
   user.confirmPassword = confirmNewPassword;
+  user.changedPasswordAt = new Date();
   await user.save();
 
+  // invalidate old refresh tokens
+  user.refreshToken = [];
+
+  // generate new access and refresh token
   const accessToken = generateToken(
     user._id,
     'JWT_ACCESS_TOKEN_SECRET',
@@ -117,93 +132,108 @@ export const updateUserPassword = async (
     'JWT_REFRESH_TOKEN_EXPIRES_IN',
   );
 
+  // store the new refresh token in DB
+  user.refreshToken.push(refreshToken);
+
+  await user.save();
+
+  // log user password update time
+  logger.info(`User ${userId} updated password at ${new Date().toISOString()}`);
+
+  // return the new tokens
   return { accessToken, refreshToken };
 };
 // ================================= End of update user password =================================== //
 
 // ================================= Start of delete me =================================== //
-export const deleteMe = async (userId: Types.ObjectId, currentToken: string) => {
-  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
+export const deleteMe = async (userId: Types.ObjectId, currentAccessToken: string) => {
+  const decoded = verifyToken(currentAccessToken, 'JWT_ACCESS_TOKEN_SECRET');
 
-  if (decoded.data === userId.toString()) {
-    const deletedUser = await userDao.updateUserData(
-      { _id: userId },
-      {
-        accountState: ACCOUNT_STATES.INACTIVE,
-      },
-    );
+  if (decoded.data !== userId.toString()) {
+    throw new AppError('You are not allowed to delete other users', RESPONSE_STATUSES.UNAUTHORIZED);
+  }
 
-    if (!deletedUser) {
-      throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
-    }
+  const deletedUser = await userDao.updateUserData(
+    { _id: userId },
+    {
+      accountState: ACCOUNT_STATES.INACTIVE,
+    },
+    {
+      new: true,
+      runValidators: false,
+    },
+  );
 
-    deletedUser.refreshToken = [];
-    deletedUser.deleteAt = new Date();
-    deletedUser.logoutAt = new Date();
-    await deletedUser.save({ validateBeforeSave: false });
+  if (!deletedUser) {
+    throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
+  }
 
-    const jobDelay =
-      deletedUser.deleteAt.getTime() + DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
+  deletedUser.refreshToken = [];
+  deletedUser.deletedAt = new Date();
+  deletedUser.logoutAt = new Date();
+  await deletedUser.save({ validateBeforeSave: false });
+
+  logger.info(`User ${userId} soft-deleted their account at ${new Date().toISOString()}`);
+
+  try {
+    const jobDelay = DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
     const accountDeletionReminderDelay = jobDelay - DURATIONS.ACCOUNT_DELETION_EMAIL_GRACE_PERIOD;
 
-    try {
-      await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
-      await sendAccountDeletionEmail(deletedUser, jobDelay);
+    await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
+    await sendAccountDeletionEmail(deletedUser, jobDelay);
 
-      deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-      deletedUser.accountInactivationReminderEmailSentAt = undefined;
-      await deletedUser.save({ validateBeforeSave: false });
-    } catch (err) {
-      throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
-    }
-  } else {
-    throw new AppError('You are not allowed to delete other users', RESPONSE_STATUSES.UNAUTHORIZED);
+    deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+    deletedUser.accountInactivationReminderEmailSentAt = undefined;
+    await deletedUser.save({ validateBeforeSave: false });
+  } catch (err) {
+    logger.error(
+      `Failed to queue account deletion emails for ${deletedUser.email}:`,
+      err instanceof Error ? err.stack : err,
+    );
   }
 };
 // ================================= End of delete me =================================== //
 
 // ================================= Start of delete user =================================== //
-export const deleteUser = async (
-  userId: Types.ObjectId,
-  role: string,
-  email: string,
-  currentToken: string,
-) => {
-  const decoded = verifyToken(currentToken, 'JWT_ACCESS_TOKEN_SECRET');
+export const deleteUser = async (email: string) => {
+  const deletedUser = await userDao.updateUserData(
+    { email },
+    {
+      accountState: ACCOUNT_STATES.DELETED,
+    },
+    {
+      new: true,
+      runValidators: false,
+    },
+  );
 
-  if (decoded.data === userId.toString() && role === USER_ROLES.ADMIN) {
-    const deletedUser = await userDao.updateUserData(
-      { email },
-      { accountState: ACCOUNT_STATES.INACTIVE },
-    );
+  if (!deletedUser) {
+    throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
+  }
 
-    if (!deletedUser) {
-      throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
-    }
+  deletedUser.refreshToken = [];
+  deletedUser.deletedAt = new Date();
+  deletedUser.logoutAt = new Date();
+  await deletedUser.save({ validateBeforeSave: false });
 
-    deletedUser.refreshToken = [];
-    deletedUser.deleteAt = new Date();
-    deletedUser.logoutAt = new Date();
-    await deletedUser.save({ validateBeforeSave: false });
+  logger.info(
+    `Admin soft-deleted the user with ID: ${deletedUser._id} at ${new Date().toISOString()}`,
+  );
 
-    const jobDelay =
-      deletedUser.deleteAt.getTime() + DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
+  try {
+    const jobDelay = DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
     const accountDeletionReminderDelay = jobDelay - DURATIONS.ACCOUNT_DELETION_EMAIL_GRACE_PERIOD;
 
-    try {
-      await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
-      await sendAccountDeletionEmail(deletedUser, jobDelay);
+    await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
+    await sendAccountDeletionEmail(deletedUser, jobDelay);
 
-      deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-      deletedUser.accountInactivationReminderEmailSentAt = undefined;
-      await deletedUser.save({ validateBeforeSave: false });
-    } catch (err) {
-      throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
-    }
-  } else {
-    throw new AppError(
-      'You are not allowed to delete users through this route.',
-      RESPONSE_STATUSES.UNAUTHORIZED,
+    deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+    deletedUser.accountInactivationReminderEmailSentAt = undefined;
+    await deletedUser.save({ validateBeforeSave: false });
+  } catch (err) {
+    logger.error(
+      `Failed to queue account deletion emails for ${deletedUser.email}:`,
+      err instanceof Error ? err.stack : err,
     );
   }
 };
@@ -214,26 +244,33 @@ export const logout = async (userId: Types.ObjectId) => {
   const currentUser = await userDao.getUserById(userId).select('+refreshToken');
 
   if (!currentUser) {
-    throw new AppError('No user found for that id', RESPONSE_STATUSES.NOT_FOUND);
+    throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
+  }
+
+  if (currentUser.accountState === ACCOUNT_STATES.INACTIVE) {
+    throw new AppError('This account is inactive', RESPONSE_STATUSES.UNAUTHORIZED);
   }
 
   currentUser.refreshToken = [];
   currentUser.logoutAt = new Date();
   await currentUser.save({ validateBeforeSave: false });
 
-  const jobDelay =
-    currentUser.logoutAt.getTime() + DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
+  const jobDelay = DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
   const accountDeletionReminderDelay = jobDelay - DURATIONS.ACCOUNT_DELETION_EMAIL_GRACE_PERIOD;
 
   try {
-    await reminderQueue.remove(`reminder-${currentUser._id}`);
+    // clean up first of unremoved jobs
+    await reminderQueue.remove(`reminder-${currentUser._id}`).catch(() => {});
+    await accountRemovalQueue.remove(`removal-${currentUser._id}`).catch(() => {});
+
     await sendAccountDeletionReminderEmail(currentUser, accountDeletionReminderDelay);
-    await accountRemovalQueue.remove(`removal-${currentUser._id}`);
     await sendAccountDeletionEmail(currentUser, jobDelay);
   } catch (error) {
-    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
+    logger.error(
+      `Failed to queue logout-related emails for user ${currentUser.email}: ${
+        error instanceof Error ? error.message : error
+      }`,
+    );
   }
-
-  return;
 };
 // ================================= End of logout =================================== //

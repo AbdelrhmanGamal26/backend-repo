@@ -57,7 +57,7 @@ const userSchema = new Schema<UserDocument>(
     },
     accountState: {
       type: String,
-      enum: [ACCOUNT_STATES.ACTIVE, ACCOUNT_STATES.INACTIVE] as const,
+      enum: [ACCOUNT_STATES.ACTIVE, ACCOUNT_STATES.INACTIVE, ACCOUNT_STATES.DELETED] as const,
       default: ACCOUNT_STATES.ACTIVE,
       select: false,
     },
@@ -112,7 +112,7 @@ const userSchema = new Schema<UserDocument>(
       type: Date,
       select: false,
     },
-    deleteAt: {
+    deletedAt: {
       type: Date,
       select: false,
     },

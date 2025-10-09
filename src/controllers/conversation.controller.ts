@@ -5,10 +5,10 @@ import * as conversationServices from '../services/conversation.service';
 
 export const getAllUserConversations = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id;
-
   const conversations = await conversationServices.getAllUserConversations(userId);
 
   res.status(RESPONSE_STATUSES.SUCCESS).json({
+    message: 'success',
     data: {
       conversations,
     },
@@ -25,6 +25,7 @@ export const startNewConversation = async (req: CustomRequest, res: Response) =>
 
   res.status(RESPONSE_STATUSES.CREATED).json({
     data: {
+      message: 'success',
       conversation,
     },
   });

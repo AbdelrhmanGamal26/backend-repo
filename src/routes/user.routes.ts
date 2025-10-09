@@ -11,14 +11,12 @@ const userRouter: Router = express.Router();
 
 userRouter.use(authenticatedMiddleware);
 
-userRouter.get('/', catchAsync(userController.getAllUsers));
+userRouter.get('/', authorizedMiddleware(USER_ROLES.ADMIN), catchAsync(userController.getAllUsers));
 
-userRouter.get('/active', catchAsync(userController.getAllActiveUsers));
-
-userRouter.delete(
-  '/delete-user',
+userRouter.get(
+  '/active',
   authorizedMiddleware(USER_ROLES.ADMIN),
-  catchAsync(userController.deleteUser),
+  catchAsync(userController.getAllActiveUsers),
 );
 
 userRouter
@@ -36,6 +34,12 @@ userRouter.patch(
   '/me/update-password',
   bodyValidationMiddleware(updatePasswordSchema),
   catchAsync(userController.updateUserPassword),
+);
+
+userRouter.delete(
+  '/delete-user',
+  authorizedMiddleware(USER_ROLES.ADMIN),
+  catchAsync(userController.deleteUser),
 );
 
 userRouter.post('/logout', catchAsync(userController.logout));

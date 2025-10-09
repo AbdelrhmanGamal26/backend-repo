@@ -6,6 +6,7 @@ export const USER_ROLES = {
 export const ACCOUNT_STATES = {
   ACTIVE: 'active',
   INACTIVE: 'inactive',
+  DELETED: 'deleted',
 } as const;
 
 export const CORS_ORIGINS: string[] = ['http://localhost:5173'];

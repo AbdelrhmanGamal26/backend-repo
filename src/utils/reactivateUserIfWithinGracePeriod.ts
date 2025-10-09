@@ -7,7 +7,7 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 const reactivateUserIfWithinGracePeriod = async (user: UserDocument) => {
   if (user.accountState !== ACCOUNT_STATES.INACTIVE) return;
 
-  const deletedAt = user.deleteAt?.getTime() ?? 0;
+  const deletedAt = user.deletedAt?.getTime() ?? 0;
   const withinGracePeriod =
     Date.now() - deletedAt <= DURATIONS.ACCOUNT_REACTIVATION_AFTER_SOFT_DELETE_GRACE_PERIOD;
 
@@ -16,7 +16,7 @@ const reactivateUserIfWithinGracePeriod = async (user: UserDocument) => {
   }
 
   user.accountState = ACCOUNT_STATES.ACTIVE;
-  user.deleteAt = undefined;
+  user.deletedAt = undefined;
   await user.save({ validateBeforeSave: false });
 };
 

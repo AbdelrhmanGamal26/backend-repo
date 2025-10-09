@@ -21,7 +21,7 @@ export interface UserSchemaFields {
   accountInactivationReminderEmailSentStatus?: string;
   accountInactivationReminderEmailSentAt?: Date;
   verifiedAt?: Date;
-  deleteAt?: Date;
+  deletedAt?: Date;
   isVerified: boolean;
   refreshToken: string[];
 }

@@ -1,13 +1,12 @@
 import { Types } from 'mongoose';
 import { Request, Response } from 'express';
+import { getQueryParam } from '../utils/generalUtils';
 import { CustomRequest } from '../@types/generalTypes';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import * as messageServices from '../services/message.service';
 
 export const getAllConversationMessages = async (req: CustomRequest, res: Response) => {
-  const conversationIdStr = Array.isArray(req.query?.conversationId)
-    ? req.query.conversationId[0]
-    : req.query?.conversationId;
+  const conversationIdStr = getQueryParam(req.query?.conversationId);
 
   if (
     !conversationIdStr ||
@@ -20,7 +19,6 @@ export const getAllConversationMessages = async (req: CustomRequest, res: Respon
   }
 
   const conversationId = new Types.ObjectId(conversationIdStr);
-
   const messages = await messageServices.getAllConversationMessages(conversationId);
 
   res.status(RESPONSE_STATUSES.SUCCESS).json({
@@ -32,7 +30,6 @@ export const getAllConversationMessages = async (req: CustomRequest, res: Respon
 
 export const sendConversationMessage = async (req: CustomRequest, res: Response) => {
   const { conversationId, message, senderId } = req.body;
-
   const sentMessage = await messageServices.sendConversationMessage(
     conversationId,
     message,

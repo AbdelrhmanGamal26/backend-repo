@@ -15,17 +15,32 @@ import { userIsVerified } from '../utils/userUtils';
 import { CreatedUserType } from '../@types/userTypes';
 import clearCookieValue from '../utils/clearCookieValue';
 import { ServiceResponse } from '../@types/generalTypes';
-import { EMAIL_SENT_STATUS } from '../constants/general';
 import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
+import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
 
 // ================================= Start of create user =================================== //
 export const createUser = async (data: CreatedUserType) => {
+  // Check if a user with this email already exists
+  const existingUser = await userDao.getUser({ email: data.email }).select('+accountState');
+
+  if (existingUser) {
+    if (existingUser.accountState === ACCOUNT_STATES.DELETED) {
+      throw new AppError(
+        'This email is no longer allowed to register.',
+        RESPONSE_STATUSES.FORBIDDEN,
+      );
+    }
+
+    throw new AppError('Email already in use.', RESPONSE_STATUSES.BAD_REQUEST);
+  }
+
+  // Create the new user
   const createdUser = await userDao.createUser(data);
 
   if (!createdUser) {
@@ -40,26 +55,25 @@ export const createUser = async (data: CreatedUserType) => {
 
   await createdUser.save({ validateBeforeSave: false });
 
-  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
-
   try {
-    await emailQueue.remove(`email-${createdUser._id}`); // Clean up job queue first
-    await sendAccountActivationEmail(createdUser, verificationUrl);
+    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?verificationToken=${verificationToken}`;
+
+    await emailQueue.remove(`email-${createdUser._id}`).catch(() => {}); // Clean up job queue first
+    await reminderQueue.remove(`reminder-${createdUser._id}`).catch(() => {}); // Clean up job queue first
+    await accountRemovalQueue.remove(`removal-${createdUser._id}`).catch(() => {}); // Clean up job queue first
 
     // send delete account permanently reminder email if user does not activate
-    await reminderQueue.remove(`reminder-${createdUser._id}`); // Clean up job queue first
+    await sendAccountActivationEmail(createdUser, verificationUrl);
     await sendAccountDeletionReminderEmail(
       createdUser,
       DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SIGNUP_WITHOUT_VERIFICATION_PERIOD,
     );
-    await accountRemovalQueue.remove(`removal-${createdUser._id}`); // Clean up job queue first
     await sendAccountDeletionEmail(
       createdUser,
       DURATIONS.TIME_TO_DELETE_AFTER_SIGNUP_WITHOUT_ACTIVATION,
     );
-  } catch (err) {
-    logger.error(`Failed to queue email verification job for user: ${createdUser.email}`);
-    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
+  } catch (error) {
+    logger.error(`Failed to queue email verification job for user: ${createdUser.email}`, error);
   }
 };
 // ================================= End of create user =================================== //
@@ -82,7 +96,14 @@ export const login = async (
 ): Promise<{ user: UserLoginReturnDataType; accessToken: string; refreshToken: string }> => {
   const user = await userDao
     .getUser({ email: userData.email })
-    .select('+password +isVerified +deleteAt +accountState +refreshToken');
+    .select('+password +isVerified +deletedAt +accountState +refreshToken');
+
+  if (user?.accountState === ACCOUNT_STATES.DELETED) {
+    throw new AppError(
+      'This account has been permanently deleted by an administrator.',
+      RESPONSE_STATUSES.UNAUTHORIZED,
+    );
+  }
 
   // Store the login attempt
   await checkLoginAttempts(userData.email);
@@ -136,8 +157,8 @@ export const login = async (
   const {
     role,
     loginAt,
-    deleteAt,
     password,
+    deletedAt,
     isVerified,
     accountState,
     refreshToken,
@@ -232,9 +253,8 @@ export const forgotPassword = async (email: string): Promise<void> => {
   try {
     await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
     await sendForgotPasswordEmail(user, resetUrl);
-  } catch (err) {
-    logger.error(`Failed to queue email verification job for user: ${user.email}`);
-    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
+  } catch (error) {
+    logger.error(`Failed to queue email verification job for user: ${user.email}`, error);
   }
 };
 // ================================= End of forgot password =================================== //
@@ -285,7 +305,7 @@ export const resetPassword = async (resetToken: string, password: string): Promi
   await user.save();
 
   // Remove the password reset job
-  await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
+  await forgotPasswordQueue.remove(`forgot-${user._id}`);
 };
 // ================================= End of reset password =================================== //
 
@@ -389,9 +409,12 @@ export const resendVerificationToken = async (email: string): Promise<ServiceRes
       status: RESPONSE_STATUSES.SUCCESS,
       message: 'Please check your email inbox for the activation email',
     };
-  } catch (err) {
-    logger.error(`Failed to queue email verification job for user: ${user.email}`, err);
-    throw new AppError('Failed to queue email for sending', RESPONSE_STATUSES.SERVER);
+  } catch (error) {
+    logger.error(`Failed to queue email verification job for user: ${user.email}`, error);
+    return {
+      status: RESPONSE_STATUSES.SERVER,
+      message: 'An unexpected error occurred while resending the verification token',
+    };
   }
 };
 // ================================= End of resend verification token =================================== //
