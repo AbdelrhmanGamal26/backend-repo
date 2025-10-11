@@ -131,6 +131,11 @@ export const login = async (
   await reminderQueue.remove(`reminder-${user._id}`);
   await accountRemovalQueue.remove(`removal-${user._id}`);
 
+  // Set the reminder job status to pending
+  user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+  user.accountInactivationReminderEmailSentAt = undefined;
+  await user.save({ validateBeforeSave: false });
+
   await clearLoginAttempts(userData.email);
 
   const refreshTokenValue = generateToken(
