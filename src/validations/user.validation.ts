@@ -5,9 +5,9 @@ export const userCreationSchema = z
   .object({
     name: ZOD_VALIDATIONS.EN_REQ_STR_MIN_MAX(20),
     email: ZOD_VALIDATIONS.EMAIL,
-    photo: ZOD_VALIDATIONS.NOT_REQ_STRING,
     password: ZOD_VALIDATIONS.PASSWORD,
     confirmPassword: ZOD_VALIDATIONS.REQ_STRING,
+    photo: ZOD_VALIDATIONS.NOT_REQ_STRING,
   })
   .refine((values) => values.password === values.confirmPassword, {
     message: 'Passwords must match!',

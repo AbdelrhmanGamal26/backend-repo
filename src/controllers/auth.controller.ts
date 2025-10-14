@@ -7,7 +7,7 @@ import setValueToCookies from '../utils/setValueToCookies';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 
 export const createUser = async (req: CustomRequest, res: Response) => {
-  await authServices.createUser(req.body);
+  await authServices.createUser(req.body, req.file);
   res.status(RESPONSE_STATUSES.CREATED).json({
     message: 'Please check your email inbox for the account verification email',
     data: null,
@@ -54,6 +54,7 @@ export const verifyResetToken = async (req: CustomRequest, res: Response) => {
       data: null,
     });
   }
+
   await authServices.verifyResetToken(resetToken);
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     message: 'Token verified successfully',
@@ -72,7 +73,6 @@ export const resetPassword = async (req: CustomRequest, res: Response) => {
   }
 
   await authServices.resetPassword(resetToken, req.body.password);
-
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     message: 'Password reset successfully',
     data: null,
@@ -90,7 +90,6 @@ export const verifyEmail = async (req: CustomRequest, res: Response) => {
   }
 
   const { status, message } = await authServices.verifyEmail(token);
-
   res.status(status).json({
     message,
     data: null,
@@ -99,7 +98,6 @@ export const verifyEmail = async (req: CustomRequest, res: Response) => {
 
 export const resendVerificationToken = async (req: CustomRequest, res: Response) => {
   const { status, message } = await authServices.resendVerificationToken(req.body.email);
-
   res.status(status).json({
     message,
     data: null,

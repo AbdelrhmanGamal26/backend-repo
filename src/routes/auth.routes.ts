@@ -6,8 +6,10 @@ import {
   userForgotPasswordSchema,
 } from '../validations/user.validation';
 import catchAsync from '../utils/catchAsync';
+import { multerUpload } from '../utils/multer';
 import * as authController from '../controllers/auth.controller';
 import bodyValidationMiddleware from '../middlewares/bodyValidationMiddleware';
+import { imageCompressor } from '../middlewares/sharpImageCompressorMiddleware';
 import { resetTokenSchema, verificationTokenSchema } from '../validations/auth.validation';
 import { queryParamsValidationMiddleware } from '../middlewares/queryParamsValidationMiddleware';
 
@@ -15,6 +17,8 @@ const authRouter: Router = express.Router();
 
 authRouter.post(
   '/signup',
+  multerUpload.single('photo'),
+  imageCompressor,
   bodyValidationMiddleware(userCreationSchema),
   catchAsync(authController.createUser),
 );

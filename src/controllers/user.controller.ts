@@ -40,7 +40,13 @@ export const getAllActiveUsers = async (req: CustomRequest, res: Response) => {
 export const updateUserProfile = async (req: CustomRequest, res: Response) => {
   const userId = req.user!._id;
   const currentAccessToken = getTokenValueFromHeaders(req);
-  const updatedUser = await userServices.updateUserProfile(userId, req.body, currentAccessToken);
+  const updatedUser = await userServices.updateUserProfile(
+    userId,
+    req.body,
+    req.file,
+    currentAccessToken,
+    req.user?.photoPublicId,
+  );
   res.status(RESPONSE_STATUSES.SUCCESS).json({
     data: {
       user: updatedUser,

@@ -13,6 +13,7 @@ redisClient.on('connect', () => console.log('connected to redis db successfully'
 // constants
 const MAX_ATTEMPTS = 5;
 const BLOCK_TIME = 60 * 15; // 15 minutes in seconds
+const DEFAULT_TTL = 60 * 60 * 24 * 90; // 90 days
 
 export const checkLoginAttempts = async (email: string) => {
   const key = `login:attempts:${email}`;
@@ -47,7 +48,7 @@ export const getFromRedis = async (key: string) => {
   return data ? JSON.parse(data) : null;
 };
 
-export const saveToRedis = async (key: string, value: any, ttlInSeconds: number = 300) => {
+export const saveToRedis = async (key: string, value: any, ttlInSeconds: number = DEFAULT_TTL) => {
   await redisClient.set(key, JSON.stringify(value), {
     expiration: {
       type: 'EX',

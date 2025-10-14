@@ -2,35 +2,36 @@ import { HydratedDocument } from 'mongoose';
 
 export interface UserSchemaFields {
   name: string;
+  role: string;
   email: string;
   photo?: string;
+  loginAt?: Date;
+  signupAt?: Date;
+  logoutAt?: Date;
   password: string;
-  role: string;
+  deletedAt?: Date;
+  verifiedAt?: Date;
+  isVerified: boolean;
+  accountState: string;
+  refreshToken: string[];
+  photoPublicId?: string;
   confirmPassword?: string;
   changedPasswordAt?: Date;
-  passwordResetToken?: string;
-  passwordResetTokenExpires?: Date;
   verifyEmailToken?: string;
+  passwordResetToken?: string;
   verifyEmailTokenExpires?: Date;
-  accountState: string;
-  signupAt?: Date;
-  loginAt?: Date;
-  logoutAt?: Date;
-  accountActivationEmailSentStatus?: string;
+  passwordResetTokenExpires?: Date;
   accountActivationEmailSentAt?: Date;
-  accountInactivationReminderEmailSentStatus?: string;
+  accountActivationEmailSentStatus?: string;
   accountInactivationReminderEmailSentAt?: Date;
-  verifiedAt?: Date;
-  deletedAt?: Date;
-  isVerified: boolean;
-  refreshToken: string[];
+  accountInactivationReminderEmailSentStatus?: string;
 }
 
 export interface UserInstanceMethods {
-  correctPassword(candidatePassword: string): Promise<boolean>;
-  changedPasswordAfter(JWTTimestamp: number): boolean;
   createPasswordResetToken(): string;
+  changedPasswordAfter(JWTTimestamp: number): boolean;
   createEmailVerificationToken(expiresIn: number): string;
+  correctPassword(candidatePassword: string): Promise<boolean>;
 }
 
 export type UserDocument = HydratedDocument<UserSchemaFields, UserInstanceMethods>;
@@ -38,6 +39,7 @@ export type UserDocument = HydratedDocument<UserSchemaFields, UserInstanceMethod
 export type CreatedUserType = {
   name: string;
   email: string;
+  photo?: string;
   password: string;
   confirmPassword: string;
 };

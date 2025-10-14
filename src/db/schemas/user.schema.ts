@@ -20,6 +20,7 @@ const userSchema = new Schema<UserDocument>(
       unique: true,
     },
     photo: String,
+    photoPublicId: String,
     role: {
       type: String,
       enum: [USER_ROLES.ADMIN, USER_ROLES.USER] as const,

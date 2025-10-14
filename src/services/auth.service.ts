@@ -19,13 +19,14 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
+import { uploadToCloudinary } from '../utils/cloudinary';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
 import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } from '../utils/bull';
 
 // ================================= Start of create user =================================== //
-export const createUser = async (data: CreatedUserType) => {
+export const createUser = async (data: CreatedUserType, file: Express.Multer.File | undefined) => {
   // Check if a user with this email already exists
   const existingUser = await userDao.getUser({ email: data.email }).select('+accountState');
 
@@ -40,6 +41,18 @@ export const createUser = async (data: CreatedUserType) => {
     throw new AppError('Email already in use.', RESPONSE_STATUSES.BAD_REQUEST);
   }
 
+  let result;
+
+  if (file) {
+    // upload to AWS s3 storage
+    // const imageUrl = await uploadToS3(file);
+    // data.photo = imageUrl;
+
+    // Alternative: upload to cloudinary storage
+    result = await uploadToCloudinary(file);
+    data.photo = result.secure_url;
+  }
+
   // Create the new user
   const createdUser = await userDao.createUser(data);
 
@@ -48,6 +61,7 @@ export const createUser = async (data: CreatedUserType) => {
   }
 
   createdUser.signupAt = new Date();
+  createdUser.photoPublicId = result.public_id;
 
   const verificationToken = createdUser.createEmailVerificationToken(
     DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
@@ -167,6 +181,8 @@ export const login = async (
     isVerified,
     accountState,
     refreshToken,
+    photoPublicId,
+    accountInactivationReminderEmailSentStatus,
     ...restUserData
   } = user.toObject();
 

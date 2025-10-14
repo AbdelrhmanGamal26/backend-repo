@@ -9,6 +9,7 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { accountRemovalQueue, reminderQueue } from '../utils/bull';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
+import { deleteFromCloudinary, uploadToCloudinary } from '../utils/cloudinary';
 
 // ================================= Start of get user =================================== //
 export const getUser = async (userId: Types.ObjectId) => userDao.getUserById(userId);
@@ -27,7 +28,9 @@ export const getAllActiveUsers = async (params: { [key: string]: any }) =>
 export const updateUserProfile = async (
   userId: Types.ObjectId,
   userData: { [key: string]: any },
+  file: Express.Multer.File | undefined,
   currentAccessToken: string,
+  oldPublicId: string | undefined,
 ) => {
   const decoded = verifyToken(currentAccessToken, 'JWT_ACCESS_TOKEN_SECRET');
 
@@ -47,13 +50,17 @@ export const updateUserProfile = async (
 
   const filteredUserData = filterObj(userData, 'name', 'photo');
 
-  // N.B:
-  // If you're hashing passwords (e.g., with bcrypt), you can’t do that inside findOneAndUpdate,
-  // because Mongoose middleware doesn’t have access to the document instance (this refers to the query, not the doc).
+  let uploadResult;
 
-  // To safely hash the password:
-  // Avoid using findOneAndUpdate for password changes.
-  // Instead, load the user, update the password, and call .save()
+  if (oldPublicId && file) {
+    // delete old image from cloudinary
+    await deleteFromCloudinary(oldPublicId);
+
+    // upload the new image to cloudinary
+    uploadResult = await uploadToCloudinary(file);
+    filteredUserData.photo = uploadResult.secure_url;
+  }
+
   const updatedUser = await userDao.updateUserData({ _id: userId }, filteredUserData, {
     new: true, // this option is used to return the newly updated document
     runValidators: true, // this option is for running validation on the newly updated document
@@ -62,6 +69,10 @@ export const updateUserProfile = async (
   if (!updatedUser) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
   }
+
+  // set the new photo public id
+  updatedUser.photoPublicId = uploadResult.public_id;
+  await updatedUser.save({ validateBeforeSave: false });
 
   if (updatedUser.accountState === ACCOUNT_STATES.INACTIVE) {
     throw new AppError('This account is inactive', RESPONSE_STATUSES.UNAUTHORIZED);
