@@ -1,4 +1,9 @@
 import { Types } from 'mongoose';
+import {
+  sendAccountDeletionEmail,
+  sendAccountDeletionByAdminEmail,
+  sendAccountDeletionReminderEmail,
+} from '../utils/bullmqJobs';
 import logger from '../utils/winston';
 import AppError from '../utils/appError';
 import * as userDao from '../DAOs/user.dao';
@@ -6,10 +11,9 @@ import DURATIONS from '../constants/durations';
 import { filterObj } from '../utils/generalUtils';
 import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { accountRemovalQueue, reminderQueue } from '../utils/bull';
+import { accountRemovalByAdminQueue, accountRemovalQueue, reminderQueue } from '../utils/bull';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import { deleteFromCloudinary, uploadToCloudinary } from '../utils/cloudinary';
-import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
 // ================================= Start of get user =================================== //
 export const getUser = async (userId: Types.ObjectId) => userDao.getUserById(userId);
@@ -101,7 +105,7 @@ export const updateUserPassword = async (
     );
   }
 
-  const user = await userDao.getUserById(userId).select('+password');
+  const user = await userDao.getUserById(userId).select('+password +accountState');
 
   if (!user) {
     throw new AppError('No user found with that ID', RESPONSE_STATUSES.NOT_FOUND);
@@ -192,14 +196,17 @@ export const deleteMe = async (userId: Types.ObjectId, currentAccessToken: strin
     const jobDelay = DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
     const accountDeletionReminderDelay = jobDelay - DURATIONS.ACCOUNT_DELETION_EMAIL_GRACE_PERIOD;
 
+    await reminderQueue.remove(`reminder-${deletedUser._id}`).catch(() => {});
+    await accountRemovalQueue.remove(`removal-${deletedUser._id}`).catch(() => {});
+
     await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
     await sendAccountDeletionEmail(deletedUser, jobDelay);
 
-    deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-    deletedUser.accountInactivationReminderEmailSentAt = undefined;
+    deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
+    deletedUser.accountInactivationReminderEmailSentAt = new Date();
     await deletedUser.save({ validateBeforeSave: false });
   } catch (err) {
-    logger.error(
+    logger.warn(
       `Failed to queue account deletion emails for ${deletedUser.email}:`,
       err instanceof Error ? err.stack : err,
     );
@@ -209,43 +216,41 @@ export const deleteMe = async (userId: Types.ObjectId, currentAccessToken: strin
 
 // ================================= Start of delete user =================================== //
 export const deleteUser = async (email: string) => {
-  const deletedUser = await userDao.updateUserData(
-    { email },
-    {
-      accountState: ACCOUNT_STATES.DELETED,
-    },
-    {
-      new: true,
-      runValidators: false,
-    },
-  );
+  const user = await userDao.getUser({ email }).select('+accountState');
 
-  if (!deletedUser) {
+  if (!user) {
     throw new AppError('No user found with that email', RESPONSE_STATUSES.NOT_FOUND);
   }
 
-  deletedUser.refreshToken = [];
-  deletedUser.deletedAt = new Date();
-  deletedUser.logoutAt = new Date();
-  await deletedUser.save({ validateBeforeSave: false });
+  if (user.accountState === ACCOUNT_STATES.DELETED) {
+    throw new AppError('User is already deleted', RESPONSE_STATUSES.CONFLICT);
+  }
 
-  logger.info(
-    `Admin soft-deleted the user with ID: ${deletedUser._id} at ${new Date().toISOString()}`,
-  );
+  user.accountState = ACCOUNT_STATES.DELETED;
+
+  user.refreshToken = [];
+  user.photo = undefined;
+  user.isVerified = false;
+  user.logoutAt = new Date();
+  user.deletedAt = new Date();
+  user.verifiedAt = undefined;
+  user.accountActivationEmailSentAt = undefined;
+  user.accountActivationEmailSentStatus = undefined;
+  user.accountInactivationReminderEmailSentAt = undefined;
+  user.accountInactivationReminderEmailSentStatus = undefined;
+  await user.save({ validateBeforeSave: false });
+
+  logger.info(`Admin soft-deleted the user with ID: ${user._id} at ${new Date().toISOString()}`);
 
   try {
-    const jobDelay = DURATIONS.BULL_JOB_ACCOUNT_REMOVAL_AFTER_SOFT_DELETE_PERIOD;
-    const accountDeletionReminderDelay = jobDelay - DURATIONS.ACCOUNT_DELETION_EMAIL_GRACE_PERIOD;
+    const jobDelay = 60 * 1000;
 
-    await sendAccountDeletionReminderEmail(deletedUser, accountDeletionReminderDelay);
-    await sendAccountDeletionEmail(deletedUser, jobDelay);
+    await accountRemovalByAdminQueue.remove(`removal-by-admin-${user._id}`).catch(() => {});
 
-    deletedUser.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
-    deletedUser.accountInactivationReminderEmailSentAt = undefined;
-    await deletedUser.save({ validateBeforeSave: false });
+    await sendAccountDeletionByAdminEmail(user, jobDelay);
   } catch (err) {
-    logger.error(
-      `Failed to queue account deletion emails for ${deletedUser.email}:`,
+    logger.warn(
+      `Failed to queue account deletion emails for ${user.email}:`,
       err instanceof Error ? err.stack : err,
     );
   }
@@ -279,7 +284,7 @@ export const logout = async (userId: Types.ObjectId) => {
     await sendAccountDeletionReminderEmail(currentUser, accountDeletionReminderDelay);
     await sendAccountDeletionEmail(currentUser, jobDelay);
   } catch (error) {
-    logger.error(
+    logger.warn(
       `Failed to queue logout-related emails for user ${currentUser.email}: ${
         error instanceof Error ? error.message : error
       }`,

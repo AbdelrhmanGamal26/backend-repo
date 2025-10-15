@@ -3,13 +3,14 @@ import {
   forgotPasswordEmailTemplate,
   accountDeletionEmailTemplate,
   accountVerificationEmailTemplate,
+  accountDeletionByAdminEmailTemplate,
   accountDeletionReminderEmailTemplate,
 } from '../constants/emailTemplates';
 import logger from './winston';
 import sendEmail from './nodemailer';
 import * as userDao from '../DAOs/user.dao';
 import { deleteFromCloudinary } from './cloudinary';
-import { EMAIL_SENT_STATUS } from '../constants/general';
+import { BULL_QUEUE_NAMES, EMAIL_SENT_STATUS } from '../constants/general';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
 const concurrency = 5;
@@ -19,12 +20,12 @@ const redisConnection: RedisOptions = {
   port: 6379,
 };
 
-export const emailQueue = new Queue('email-queue', {
+export const emailQueue = new Queue(BULL_QUEUE_NAMES.EMAIL_QUEUE, {
   connection: redisConnection,
 });
 
 export const emailWorker = new Worker(
-  'email-queue',
+  BULL_QUEUE_NAMES.EMAIL_QUEUE,
   async (job) => {
     const data = job.data;
 
@@ -81,12 +82,14 @@ emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   );
 });
 
-export const forgotPasswordQueue = new Queue('forgot-queue', {
+//================================================================================//
+
+export const forgotPasswordQueue = new Queue(BULL_QUEUE_NAMES.FORGOT_QUEUE, {
   connection: redisConnection,
 });
 
 export const forgotPasswordWorker = new Worker(
-  'forgot-queue',
+  BULL_QUEUE_NAMES.FORGOT_QUEUE,
   async (job) => {
     const data = job.data;
 
@@ -130,12 +133,14 @@ forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   );
 });
 
-export const reminderQueue = new Queue('reminder-queue', {
+//================================================================================//
+
+export const reminderQueue = new Queue(BULL_QUEUE_NAMES.REMINDER_QUEUE, {
   connection: redisConnection,
 });
 
 export const reminderWorker = new Worker(
-  'reminder-queue',
+  BULL_QUEUE_NAMES.REMINDER_QUEUE,
   async (job) => {
     const data = job.data;
 
@@ -165,8 +170,8 @@ reminderWorker.on('completed', async (job: Job) => {
   const user = await userDao.getUserById(job.data.userId);
 
   if (user) {
-    user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
-    user.accountInactivationReminderEmailSentAt = new Date();
+    user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
+    user.accountInactivationReminderEmailSentAt = undefined;
     await user.save({ validateBeforeSave: false });
   }
 
@@ -196,12 +201,14 @@ reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   );
 });
 
-export const accountRemovalQueue = new Queue('removal-queue', {
+//================================================================================//
+
+export const accountRemovalQueue = new Queue(BULL_QUEUE_NAMES.REMOVAL_QUEUE, {
   connection: redisConnection,
 });
 
 export const accountRemovalWorker = new Worker(
-  'removal-queue',
+  BULL_QUEUE_NAMES.REMOVAL_QUEUE,
   async (job) => {
     const data = job.data;
 
@@ -241,6 +248,60 @@ accountRemovalWorker.on('failed', async (job: Job | undefined, _err: Error) => {
 
   logger.error(`User: ${job.data.userData.email} did not receive account deletion email.`);
 });
+
+//================================================================================//
+
+export const accountRemovalByAdminQueue = new Queue(BULL_QUEUE_NAMES.REMOVAL_BY_ADMIN_QUEUE, {
+  connection: redisConnection,
+});
+
+export const accountRemovalByAdminWorker = new Worker(
+  BULL_QUEUE_NAMES.REMOVAL_BY_ADMIN_QUEUE,
+  async (job) => {
+    const data = job.data;
+
+    try {
+      await sendEmail({
+        email: data.userData.email,
+        subject: 'Account permanent deletion.',
+        message: handlebarsEmailTemplateCompiler(accountDeletionByAdminEmailTemplate, {
+          name: data.userData.name,
+        }),
+      });
+    } catch (err) {
+      throw err;
+    }
+  },
+  {
+    connection: redisConnection,
+    concurrency,
+  },
+);
+
+accountRemovalByAdminWorker.on('completed', async (job) => {
+  const user = await userDao.getUserById(job.data.userId).select('+photoPublicId');
+
+  // update the user name to deleted user after removal by admin and receiving the removal email
+  if (user) {
+    user.name = 'Deleted user';
+    await user.save({ validateBeforeSave: false });
+  }
+
+  // delete user image from cloudinary storage
+  if (user?.photoPublicId) {
+    await deleteFromCloudinary(user.photoPublicId);
+  }
+
+  logger.info(`User: ${job.data.userData.email} received account deletion email.`);
+});
+
+accountRemovalByAdminWorker.on('failed', async (job: Job | undefined, _err: Error) => {
+  if (!job) return;
+
+  logger.error(`User: ${job.data.userData.email} did not receive account deletion email.`);
+});
+
+//================================================================================//
 
 const BULL_JOB_ATTEMPTS = 3;
 

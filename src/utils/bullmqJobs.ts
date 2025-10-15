@@ -4,6 +4,7 @@ import {
   getBullJobSettings,
   accountRemovalQueue,
   forgotPasswordQueue,
+  accountRemovalByAdminQueue,
 } from './bull';
 import DURATIONS from '../constants/durations';
 import { UserDocument } from '../@types/userTypes';
@@ -81,5 +82,21 @@ export const sendAccountDeletionEmail = async (user: UserDocument, jobDelay: num
     {
       delay: jobDelay,
       jobId: `removal-${user._id}`,
+    },
+  );
+
+export const sendAccountDeletionByAdminEmail = async (user: UserDocument, jobDelay: number) =>
+  await accountRemovalByAdminQueue.add(
+    BULL_ACCOUNT_JOB_NAME.SEND_REMOVAL_BY_ADMIN,
+    {
+      userData: {
+        email: user.email,
+        name: user.name,
+      },
+      userId: user._id,
+    },
+    {
+      delay: jobDelay,
+      jobId: `removal-by-admin-${user._id}`,
     },
   );

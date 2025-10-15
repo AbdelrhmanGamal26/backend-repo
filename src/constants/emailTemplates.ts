@@ -27,3 +27,12 @@ export const accountDeletionEmailTemplate =
   '<p>We hope you enjoyed using our application.</p>' +
   '<p>Thank you,</p>' +
   '<p>The [App Name] Team</p>';
+
+export const accountDeletionByAdminEmailTemplate =
+  '<p>Hi {{name}},</p>' +
+  '<p>We want to inform you that your account has been permanently removed </p>' +
+  '<p>because you have violated our terms of use.</p>' +
+  '<p>You will no longer be able to login or signup using this email.</p>' +
+  '<p>We hope you enjoyed using our application.</p>' +
+  '<p>Thank you,</p>' +
+  '<p>The [App Name] Team</p>';

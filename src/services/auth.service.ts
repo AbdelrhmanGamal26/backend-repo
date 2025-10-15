@@ -145,8 +145,8 @@ export const login = async (
   await reactivateUserIfWithinGracePeriod(user);
 
   // Remove any account deletion reminder job
-  await reminderQueue.remove(`reminder-${user._id}`);
-  await accountRemovalQueue.remove(`removal-${user._id}`);
+  await reminderQueue.remove(`reminder-${user._id}`).catch(() => {});
+  await accountRemovalQueue.remove(`removal-${user._id}`).catch(() => {});
 
   // Set the reminder job status to pending
   user.accountInactivationReminderEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
@@ -167,6 +167,7 @@ export const login = async (
   // Update login/logout times
   user.loginAt = new Date();
   user.logoutAt = undefined;
+  user.deletedAt = undefined;
   await user.save({ validateBeforeSave: false });
 
   // Generate access token
@@ -275,7 +276,7 @@ export const forgotPassword = async (email: string): Promise<void> => {
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?resetToken=${resetToken}`;
 
   try {
-    await forgotPasswordQueue.remove(`forgot-${user._id}`); // Cleanup first
+    await forgotPasswordQueue.remove(`forgot-${user._id}`).catch(() => {}); // Cleanup first
     await sendForgotPasswordEmail(user, resetUrl);
   } catch (error) {
     logger.error(`Failed to queue email verification job for user: ${user.email}`, error);
@@ -329,7 +330,7 @@ export const resetPassword = async (resetToken: string, password: string): Promi
   await user.save();
 
   // Remove the password reset job
-  await forgotPasswordQueue.remove(`forgot-${user._id}`);
+  await forgotPasswordQueue.remove(`forgot-${user._id}`).catch(() => {});
 };
 // ================================= End of reset password =================================== //
 
@@ -372,9 +373,9 @@ export const verifyEmail = async (verificationToken: string): Promise<ServiceRes
     await user.save();
 
     // Remove pending jobs
-    await emailQueue.remove(`email-${user._id}`);
-    await reminderQueue.remove(`reminder-${user._id}`);
-    await accountRemovalQueue.remove(`removal-${user._id}`);
+    await emailQueue.remove(`email-${user._id}`).catch(() => {});
+    await reminderQueue.remove(`reminder-${user._id}`).catch(() => {});
+    await accountRemovalQueue.remove(`removal-${user._id}`).catch(() => {});
 
     return {
       status: RESPONSE_STATUSES.SUCCESS,
@@ -424,7 +425,7 @@ export const resendVerificationToken = async (email: string): Promise<ServiceRes
     user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.PENDING;
     await user.save({ validateBeforeSave: false });
 
-    await emailQueue.remove(`email-${user._id}`);
+    await emailQueue.remove(`email-${user._id}`).catch(() => {});
     await sendAccountActivationEmail(user, verificationUrl);
 
     user.accountActivationEmailSentStatus = EMAIL_SENT_STATUS.SUCCESS;
