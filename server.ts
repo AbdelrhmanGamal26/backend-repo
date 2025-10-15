@@ -32,7 +32,7 @@ mongoose
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-const io = new SocketIOServer(server, {
+export const io = new SocketIOServer(server, {
   cors: {
     origin: CORS_ORIGINS,
     credentials: true,

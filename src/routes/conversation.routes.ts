@@ -10,7 +10,11 @@ conversationRouter.use(authenticatedMiddleware);
 conversationRouter
   .route('/')
   .get(catchAsync(conversationController.getAllUserConversations))
-  .post(catchAsync(conversationController.startNewConversation))
+  .post(catchAsync(conversationController.startNewConversation));
+
+conversationRouter
+  .route('/:id')
+  .get(catchAsync(conversationController.getConversation))
   .delete(catchAsync(conversationController.deleteConversation));
 
 export default conversationRouter;

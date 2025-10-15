@@ -24,8 +24,20 @@ export const startNewConversation = async (req: CustomRequest, res: Response) =>
   );
 
   res.status(RESPONSE_STATUSES.CREATED).json({
+    message: 'success',
     data: {
-      message: 'success',
+      conversation,
+    },
+  });
+};
+
+export const getConversation = async (req: CustomRequest, res: Response) => {
+  const conversationId = req.params.id;
+  const conversation = await conversationServices.getConversation(conversationId);
+
+  res.status(RESPONSE_STATUSES.SUCCESS).json({
+    message: 'success',
+    data: {
       conversation,
     },
   });

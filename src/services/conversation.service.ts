@@ -47,6 +47,14 @@ export const getAllUserConversations = async (userId: Types.ObjectId) => {
 };
 // ================================= End of get user conversations =================================== //
 
+// ================================= Start of get user conversation =================================== //
+export const getConversation = async (conversationId: string) => {
+  const conversations = await conversationDao.getConversation({ conversationId });
+
+  return conversations;
+};
+// ================================= End of get user conversation =================================== //
+
 // ================================= Start of delete conversation =================================== //
 export const deleteConversation = async () => {
   console.log('conversation deleted');

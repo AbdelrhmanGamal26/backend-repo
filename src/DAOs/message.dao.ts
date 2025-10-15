@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import DURATIONS from '../constants/durations';
 import Message from '../db/schemas/message.schema';
 import { getFromRedis, saveToRedis } from '../utils/redis';
 
@@ -12,7 +13,11 @@ export const getAllConversationMessages = async (conversationId: Types.ObjectId)
     return cachedMessages;
   } else {
     const messages = await Message.find({ conversationId });
-    await saveToRedis(cacheKey, messages);
+    await saveToRedis(
+      cacheKey,
+      messages,
+      DURATIONS.MESSAGES_EXPIRATION_PERIOD_IN_REDIS_CACHE_IN_SECONDS,
+    );
 
     return messages;
   }
