@@ -58,6 +58,8 @@ emailWorker.on('completed', async (job: Job) => {
     user.save({ validateBeforeSave: false });
   }
 
+  await emailQueue.remove(`email-${user?._id}`);
+
   logger.info(
     `Account verification email sent to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
   );
@@ -128,6 +130,9 @@ forgotPasswordWorker.on('failed', async (job: Job | undefined, _err: Error) => {
     currentUser.passwordResetTokenExpires = undefined;
     await currentUser.save({ validateBeforeSave: false });
   }
+
+  await forgotPasswordQueue.remove(`forgot-${currentUser?._id}`);
+
   logger.error(
     `Failed to send password resetting email to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
   );
@@ -174,6 +179,8 @@ reminderWorker.on('completed', async (job: Job) => {
     user.accountInactivationReminderEmailSentAt = undefined;
     await user.save({ validateBeforeSave: false });
   }
+
+  await reminderQueue.remove(`reminder-${user?._id}`);
 
   logger.info(
     `Account deletion reminder email sent to user: ${job.data.userData.name}, email: ${job.data.userData.email}`,
@@ -240,6 +247,8 @@ accountRemovalWorker.on('completed', async (job) => {
 
   await userDao.deleteUserById(job.data.userId);
 
+  await accountRemovalQueue.remove(`removal-${user?._id}`);
+
   logger.info(`User: ${job.data.userData.email} received account deletion email.`);
 });
 
@@ -291,6 +300,8 @@ accountRemovalByAdminWorker.on('completed', async (job) => {
   if (user?.photoPublicId) {
     await deleteFromCloudinary(user.photoPublicId);
   }
+
+  await accountRemovalByAdminQueue.remove(`remove-by-admin-${user?._id}`);
 
   logger.info(`User: ${job.data.userData.email} received account deletion email.`);
 });
