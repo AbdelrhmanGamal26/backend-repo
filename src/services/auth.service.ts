@@ -15,11 +15,11 @@ import { userIsVerified } from '../utils/userUtils';
 import { CreatedUserType } from '../@types/userTypes';
 import clearCookieValue from '../utils/clearCookieValue';
 import { ServiceResponse } from '../@types/generalTypes';
+import { uploadToCloudinary } from '../utils/cloudinary';
 import { generateToken, verifyToken } from '../utils/jwt';
 import setValueToCookies from '../utils/setValueToCookies';
 import rotateRefreshToken from '../utils/rotateRefreshToken';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
-import { uploadToCloudinary } from '../utils/cloudinary';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
 import reactivateUserIfWithinGracePeriod from '../utils/reactivateUserIfWithinGracePeriod';
 import { checkLoginAttempts, clearLoginAttempts, recordFailedAttempt } from '../utils/redis';
@@ -61,7 +61,10 @@ export const createUser = async (data: CreatedUserType, file: Express.Multer.Fil
   }
 
   createdUser.signupAt = new Date();
-  createdUser.photoPublicId = result.public_id;
+
+  if (createdUser.photo) {
+    createdUser.photoPublicId = result.public_id;
+  }
 
   const verificationToken = createdUser.createEmailVerificationToken(
     DURATIONS.EMAIL_VERIFICATION_TOKEN_AGE,
@@ -334,7 +337,9 @@ export const resetPassword = async (resetToken: string, password: string): Promi
 export const verifyEmail = async (verificationToken: string): Promise<ServiceResponse> => {
   const hashedToken = hashToken(verificationToken);
 
-  const user = await userDao.getUser({ verifyEmailToken: hashedToken });
+  const user = await userDao
+    .getUser({ verifyEmailToken: hashedToken })
+    .select('+verifyEmailTokenExpires');
 
   if (!user) {
     return {

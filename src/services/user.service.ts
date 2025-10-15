@@ -71,8 +71,10 @@ export const updateUserProfile = async (
   }
 
   // set the new photo public id
-  updatedUser.photoPublicId = uploadResult.public_id;
-  await updatedUser.save({ validateBeforeSave: false });
+  if (updatedUser.photo) {
+    updatedUser.photoPublicId = uploadResult.public_id;
+    await updatedUser.save({ validateBeforeSave: false });
+  }
 
   if (updatedUser.accountState === ACCOUNT_STATES.INACTIVE) {
     throw new AppError('This account is inactive', RESPONSE_STATUSES.UNAUTHORIZED);
