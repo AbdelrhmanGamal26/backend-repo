@@ -8,8 +8,8 @@ import { generateToken, verifyToken } from '../utils/jwt';
 import RESPONSE_STATUSES from '../constants/responseStatuses';
 import { accountRemovalQueue, reminderQueue } from '../utils/bull';
 import { ACCOUNT_STATES, EMAIL_SENT_STATUS } from '../constants/general';
-import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 import { deleteFromCloudinary, uploadToCloudinary } from '../utils/cloudinary';
+import { sendAccountDeletionEmail, sendAccountDeletionReminderEmail } from '../utils/bullmqJobs';
 
 // ================================= Start of get user =================================== //
 export const getUser = async (userId: Types.ObjectId) => userDao.getUserById(userId);

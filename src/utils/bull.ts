@@ -8,6 +8,7 @@ import {
 import logger from './winston';
 import sendEmail from './nodemailer';
 import * as userDao from '../DAOs/user.dao';
+import { deleteFromCloudinary } from './cloudinary';
 import { EMAIL_SENT_STATUS } from '../constants/general';
 import handlebarsEmailTemplateCompiler from './handlebarsEmailTemplateCompiler';
 
@@ -64,7 +65,10 @@ emailWorker.on('completed', async (job: Job) => {
 emailWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  const currentUser = await userDao.getUserById(job.data.userId);
+  const currentUser = await userDao
+    .getUserById(job.data.userId)
+    .select('+accountActivationEmailSentStatus');
+
   if (currentUser && currentUser.accountActivationEmailSentStatus !== EMAIL_SENT_STATUS.SUCCESS) {
     currentUser.verifyEmailToken = undefined;
     currentUser.verifyEmailTokenExpires = undefined;
@@ -135,8 +139,8 @@ export const reminderWorker = new Worker(
   async (job) => {
     const data = job.data;
 
-    const gracePeriod = 3;
-    const remainingPeriod = gracePeriod - job.attemptsMade;
+    const gracePeriodInDays = 3;
+    const remainingPeriod = gracePeriodInDays - job.attemptsMade;
 
     try {
       await sendEmail({
@@ -174,7 +178,9 @@ reminderWorker.on('completed', async (job: Job) => {
 reminderWorker.on('failed', async (job: Job | undefined, _err: Error) => {
   if (!job) return;
 
-  const currentUser = await userDao.getUserById(job.data.userId);
+  const currentUser = await userDao
+    .getUserById(job.data.userId)
+    .select('+accountInactivationReminderEmailSentStatus');
 
   if (
     currentUser &&
@@ -218,6 +224,13 @@ export const accountRemovalWorker = new Worker(
 );
 
 accountRemovalWorker.on('completed', async (job) => {
+  const user = await userDao.getUserById(job.data.userId).select('+photoPublicId');
+
+  // delete user image from cloudinary storage
+  if (user && user.photoPublicId) {
+    await deleteFromCloudinary(user.photoPublicId);
+  }
+
   await userDao.deleteUserById(job.data.userId);
 
   logger.info(`User: ${job.data.userData.email} received account deletion email.`);
