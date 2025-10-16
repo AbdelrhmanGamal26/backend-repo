@@ -4,12 +4,17 @@ const setupSocketHandlers = (io: Server) => {
   io.on('connection', (socket: Socket) => {
     console.log('Client connected:', socket.id);
 
+    // Join user's personal room
+    socket.on('joinUserRoom', ({ userId }) => {
+      socket.join(`user-${userId}`);
+    });
+
     socket.on('joinRoom', ({ roomId }) => {
       socket.join(roomId);
     });
 
     socket.on('privateRoomChat', ({ roomId, msg, senderId }) => {
-      console.log(roomId, msg);
+      // console.log(roomId, msg);
 
       const messageWithSender = { ...msg, senderId };
 

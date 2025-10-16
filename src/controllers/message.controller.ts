@@ -28,13 +28,9 @@ export const getAllConversationMessages = async (req: CustomRequest, res: Respon
   });
 };
 
-export const sendConversationMessage = async (req: CustomRequest, res: Response) => {
+export const createMessage = async (req: CustomRequest, res: Response) => {
   const { conversationId, message, senderId } = req.body;
-  const sentMessage = await messageServices.sendConversationMessage(
-    conversationId,
-    message,
-    senderId,
-  );
+  const sentMessage = await messageServices.createMessage(conversationId, message, senderId);
 
   res.status(RESPONSE_STATUSES.CREATED).json({
     data: {
@@ -43,6 +39,6 @@ export const sendConversationMessage = async (req: CustomRequest, res: Response)
   });
 };
 
-export const deleteConversationMessage = async (_req: Request, _res: Response) => {
-  await messageServices.deleteConversationMessage();
+export const deleteMessage = async (_req: Request, _res: Response) => {
+  await messageServices.deleteMessage();
 };

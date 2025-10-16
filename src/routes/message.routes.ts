@@ -10,7 +10,7 @@ messageRouter.use(authenticatedMiddleware);
 messageRouter
   .route('/')
   .get(catchAsync(messageController.getAllConversationMessages))
-  .post(catchAsync(messageController.sendConversationMessage))
-  .delete(catchAsync(messageController.deleteConversationMessage));
+  .post(catchAsync(messageController.createMessage))
+  .delete(catchAsync(messageController.deleteMessage));
 
 export default messageRouter;

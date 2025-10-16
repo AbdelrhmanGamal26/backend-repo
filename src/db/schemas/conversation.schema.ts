@@ -12,6 +12,15 @@ const conversationSchema = new Schema(
       require: true,
       ref: 'User',
     },
+    hasMessages: {
+      type: Boolean,
+      default: false,
+    },
+    lastMessage: {
+      content: String,
+      sender: { type: Schema.Types.ObjectId, ref: 'User' },
+      createdAt: Date,
+    },
   },
   {
     strict: true,
