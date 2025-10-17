@@ -11,4 +11,4 @@ export const getConversation = (data: { [key: string]: any }) =>
   Conversation.findOne(data).populate('members', '_id email name photo lastMessage');
 
 export const updateConversation = (id: Types.ObjectId, data: { [key: string]: any }) =>
-  Conversation.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  Conversation.findByIdAndUpdate({ _id: id }, { $set: data }, { new: true, runValidators: true });

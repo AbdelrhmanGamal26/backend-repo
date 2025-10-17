@@ -6,7 +6,7 @@ import RESPONSE_STATUSES from '../constants/responseStatuses';
 
 // ================================= Start of start conversation =================================== //
 export const startNewConversation = async (currentUserId: Types.ObjectId, email: string) => {
-  const recipientUser = await userDao.getUser({ email });
+  const recipientUser = await userDao.getUser({ email }).lean();
 
   if (!recipientUser) {
     throw new AppError('No user found with that Email', RESPONSE_STATUSES.NOT_FOUND);
@@ -23,7 +23,7 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
   const roomId =
     members[0] < members[1] ? `${members[0]}-${members[1]}` : `${members[1]}-${members[0]}`;
 
-  let conversation = await conversationDao.getConversation({ roomId });
+  let conversation = await conversationDao.getConversation({ roomId }).lean();
 
   if (!conversation) {
     const created = await conversationDao.createConversation({
@@ -32,7 +32,7 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
     });
 
     // Populate after creation
-    conversation = await conversationDao.getConversation({ _id: created._id });
+    conversation = await conversationDao.getConversation({ _id: created._id }).lean();
   }
 
   return conversation;
@@ -41,7 +41,7 @@ export const startNewConversation = async (currentUserId: Types.ObjectId, email:
 
 // ================================= Start of get user conversations =================================== //
 export const getAllUserConversations = async (userId: Types.ObjectId) => {
-  const conversations = await conversationDao.getAllUserConversations(userId);
+  const conversations = await conversationDao.getAllUserConversations(userId).lean();
 
   return conversations;
 };
@@ -49,7 +49,7 @@ export const getAllUserConversations = async (userId: Types.ObjectId) => {
 
 // ================================= Start of get user conversation =================================== //
 export const getConversation = async (conversationId: string) => {
-  const conversations = await conversationDao.getConversation({ conversationId });
+  const conversations = await conversationDao.getConversation({ conversationId }).lean();
 
   return conversations;
 };

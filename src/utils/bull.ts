@@ -238,7 +238,7 @@ export const accountRemovalWorker = new Worker(
 );
 
 accountRemovalWorker.on('completed', async (job) => {
-  const user = await userDao.getUserById(job.data.userId).select('+photoPublicId');
+  const user = await userDao.getUserById(job.data.userId).select('+photoPublicId').lean();
 
   // delete user image from cloudinary storage
   if (user && user.photoPublicId) {

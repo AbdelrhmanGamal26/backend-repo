@@ -28,7 +28,7 @@ import { reminderQueue, emailQueue, accountRemovalQueue, forgotPasswordQueue } f
 // ================================= Start of create user =================================== //
 export const createUser = async (data: CreatedUserType, file: Express.Multer.File | undefined) => {
   // Check if a user with this email already exists
-  const existingUser = await userDao.getUser({ email: data.email }).select('+accountState');
+  const existingUser = await userDao.getUser({ email: data.email }).select('+accountState').lean();
 
   if (existingUser) {
     if (existingUser.accountState === ACCOUNT_STATES.DELETED) {

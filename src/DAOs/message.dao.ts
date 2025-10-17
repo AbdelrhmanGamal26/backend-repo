@@ -12,7 +12,7 @@ export const getAllConversationMessages = async (conversationId: Types.ObjectId)
   if (cachedMessages) {
     return cachedMessages;
   } else {
-    const messages = await Message.find({ conversationId });
+    const messages = await Message.find({ conversationId }).lean();
     await saveToRedis(
       cacheKey,
       messages,
